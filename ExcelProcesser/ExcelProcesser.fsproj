@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Linq.fs" />
+    <Compile Include="CellParsers.fs" />
+    <Compile Include="RangeParsers.fs" />
+    <Compile Include="Matrix.fs" />
+    <Compile Include="Excel.fs" />
+   <Compile Include="Parser.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <Import Project="..\.paket\Paket.Restore.targets" />
+</Project>
