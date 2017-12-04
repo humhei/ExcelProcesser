@@ -2,9 +2,9 @@
 module Excel
 open OfficeOpenXml
 open System.IO
-open System.Drawing
-open CellParsers
-open RangeParsers
+open LinearParsers
+open MatrixParsers
+open OfficeOpenXml
 let getWorksheets filename = seq {
     let file = FileInfo(filename) 
     let xlPackage = new ExcelPackage(file)
@@ -36,10 +36,44 @@ let getUserRange  worksheet:seq<ExcelRangeBase> = seq {
             yield content:>ExcelRangeBase
           
 }
-let runParser (parser:RangeParser<'a>)  worksheet=
+let runLinearParser (parser:LinearParser<'a>)  worksheet=
     let t= ref 0
     worksheet
     |>getUserRange
     |>Seq.cache
     |>fun c->{position=t;userRange=c}  
     |>parser
+let runMatrixParser (parser:MatrixParser)  worksheet=
+    let rowAny (n:int) (cell:ExcelRangeBase)=
+        seq {
+            for i=0 to n do 
+            yield cell.Offset(0,i)
+        }
+    let extend (range:Range list) (userRange:ExcelRangeBase seq) =
+        if Seq.isEmpty range then seq{yield userRange}
+        else 
+            match Seq.head range with 
+            |AnyCell n->  userRange
+                         |>Seq.map(rowAny n)
+            |_ ->failwithf "Not implemented"
+    let (h,t)=
+        match Seq.head parser with
+          |PLRow row->
+            match Seq.head row with
+            |CellParser p->p,[]
+            |Range r-> match r with
+                        |h::t->match h with
+                               |CellParser p->p,t
+                               |_->failwithf "Never excute"
+                        |_-> failwithf "Never excute"
+            |_->failwithf "cell (1,1) must be CellParser"
+          |_->failwithf "R1 must be PLRow"
+    worksheet
+    |>getUserRange
+    |>Seq.cache
+    |>Seq.where(h)
+    |>extend t
+    |>Seq.map(fun c->
+        c
+        |>Seq.map(fun n->n.Text))
+let runParser=runMatrixParser

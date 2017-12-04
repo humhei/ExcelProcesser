@@ -17,3 +17,4 @@ let pAny :CellParser=fun _->true
 let (<&>) (p1:CellParser) (p2:CellParser)=
     fun (cell:ExcelRangeBase)->
         p1 cell&&p2 cell
+   

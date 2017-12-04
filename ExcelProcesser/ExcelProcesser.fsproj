@@ -7,8 +7,8 @@
   <ItemGroup>
     <Compile Include="Linq.fs" />
     <Compile Include="CellParsers.fs" />
-    <Compile Include="RangeParsers.fs" />
-    <Compile Include="Matrix.fs" />
+    <Compile Include="LinearParsers.fs" />
+    <Compile Include="MatrixParsers.fs" />
     <Compile Include="Excel.fs" />
    <Compile Include="Parser.fs" />
     <Compile Include="Program.fs" />
