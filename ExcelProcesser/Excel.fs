@@ -4,6 +4,7 @@ open OfficeOpenXml
 open System.IO
 open LinearParsers
 open MatrixParsers
+open ArrayParsers
 let getWorksheets filename = seq {
     let file = FileInfo(filename) 
     let xlPackage = new ExcelPackage(file)
@@ -85,4 +86,10 @@ let runMatrixParser (parser:MatrixParser)  worksheet=
     |>Seq.map(fun c->
         c
         |>Seq.map(fun n->n.Text))
-let runParser=runMatrixParser
+let runArraryParser (parser:ArrayParser)  worksheet=
+    worksheet
+    |>getUserRange
+    |>Seq.cache
+    |>fun c->{userRange=c;shift=[0]}
+    |>parser     
+let runParser= runArraryParser

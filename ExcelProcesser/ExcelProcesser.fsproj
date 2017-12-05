@@ -9,6 +9,7 @@
     <Compile Include="CellParsers.fs" />
     <Compile Include="LinearParsers.fs" />
     <Compile Include="MatrixParsers.fs" />
+    <Compile Include="ArrayParsers.fs" />
     <Compile Include="Excel.fs" />
    <Compile Include="Parser.fs" />
     <Compile Include="Program.fs" />

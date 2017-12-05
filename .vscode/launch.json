@@ -15,6 +15,7 @@
         },
         {
             "name": "Debug Console",
+            "enableStepFiltering": false,
             "request": "launch",
             "preLaunchTask": "Build Console",
             "type": "coreclr",            
