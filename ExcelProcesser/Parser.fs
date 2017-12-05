@@ -13,7 +13,11 @@ let IRunPaser (fileName:string)=
     let a=Stopwatch()
     a.Start()
     let parser:MatrixParser=
-       [PLRow [CellParser (pRegex("GF.*双装")<&>pColor Color.Yellow) .>>. AnyCell 2]]
+       [PLRow [
+           CellParser (pRegex("GF.*双装")<&>pBkColor Color.Yellow) 
+           .>>. CellParser (pFontColor Color.Blue) 
+           .>>. AnyCell 2]
+        AnyRow 1 ]
     let numberData=
         fileName
         |>Excel.getWorksheetByIndex 1

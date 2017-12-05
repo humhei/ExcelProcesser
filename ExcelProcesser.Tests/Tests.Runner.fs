@@ -2,12 +2,11 @@
 module Runner
 open Expecto
 open Expecto.Logging
-open System
 open Tests.MyTests
 let testConfig =  
-    { Expecto.Tests.defaultConfig with 
+    { defaultConfig with 
          parallelWorkers = 1
-         verbosity = LogLevel.Debug }
+         verbosity = Debug }
 
 let liteDbTests = 
     testList "All tests" [  
@@ -15,4 +14,4 @@ let liteDbTests =
     ]
 
 [<EntryPoint>]
-let main argv = runTests testConfig liteDbTests
+let main _ = runTests testConfig liteDbTests

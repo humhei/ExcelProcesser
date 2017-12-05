@@ -4,7 +4,6 @@ open OfficeOpenXml
 open System.IO
 open LinearParsers
 open MatrixParsers
-open OfficeOpenXml
 let getWorksheets filename = seq {
     let file = FileInfo(filename) 
     let xlPackage = new ExcelPackage(file)
@@ -52,10 +51,20 @@ let runMatrixParser (parser:MatrixParser)  worksheet=
     let extend (range:Range list) (userRange:ExcelRangeBase seq) =
         if Seq.isEmpty range then seq{yield userRange}
         else 
-            match Seq.head range with 
-            |AnyCell n->  userRange
-                         |>Seq.map(rowAny n)
-            |_ ->failwithf "Not implemented"
+            let rec loop (accum:ExcelRangeBase seq) (n:int) range =
+                match range with
+                |h::t->match h with 
+                        |AnyCell m->  loop accum (m+n) t
+                        |CellParser c-> 
+                            accum
+                            |>Seq.where(fun m->
+                              m.Offset(0,n+1)|>c)
+                            |>fun c->loop c (n+1) t
+                        |_ ->failwithf "Not implemented"
+                |[]->
+                    accum
+                    |>Seq.map(rowAny n)  
+            loop userRange 0 range
     let (h,t)=
         match Seq.head parser with
           |PLRow row->

@@ -22,5 +22,11 @@ let (.>>) (p1:CellParser) (p2:CellParser)=
         let preCell=cell.Offset(0,-1)
         p1 cell&&p2 preCell
 let (.>>.) (p1:Range) (p2:Range):Range=
-    Range [p1;p2]
-    
+    match p1 with
+    |Range r1->
+        match p2 with
+        |Range r2-> Range<| ([r1;r2]|>List.concat)
+        |_-> Range<| ([r1;[p2]]|>List.concat)
+    |_-> match p2 with
+          |Range r2-> Range (p1::r2)
+          |_->Range [p1;p2]

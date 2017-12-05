@@ -2,13 +2,23 @@ module CellParsers
 open System.Drawing
 open OfficeOpenXml
 open System.Text.RegularExpressions
+open OfficeOpenXml.Style
 type CellParser=ExcelRangeBase -> bool
-let pColor (color:Color):CellParser=
+let getColor (color:ExcelColor)=
+    if color.Indexed >0 then color.LookupColor()
+    else "#"+color.Rgb
+let pBkColor (color:Color):CellParser=
     fun (cell:ExcelRangeBase)->
-        let toHex (color:Color)=sprintf "#%02X%02X%02X%02x" color.A color.R color.G color.B
-        let bkColor=cell.Style.Fill.BackgroundColor.LookupColor()
+        let toHex (color:Color)=sprintf "#%02X%02X%02X%02X" color.A color.R color.G color.B
+        let bkColor=cell.Style.Fill.BackgroundColor|>getColor
         let targetColor=  toHex color
         bkColor=targetColor
+let pFontColor (color:Color):CellParser=
+    fun (cell:ExcelRangeBase)->
+        let toHex (color:Color)=sprintf "#%02X%02X%02X%02X" color.A color.R color.G color.B
+        let fontColor=cell.Style.Font.Color|>getColor
+        let targetColor=  toHex color
+        fontColor=targetColor        
 let pRegex pattern:CellParser=
     fun (cell:ExcelRangeBase)->
         let m=Regex.Match(cell.Text, pattern)
