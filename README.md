@@ -1,5 +1,5 @@
 # ExcelProcesser
-Parser excel in a predicate array
+Parser excel file with combinator
 ## NugetPackage
   .net standard 2.0 package
   [ExcelProcesser](https://www.nuget.org/packages/ExcelProcesser/)
@@ -14,12 +14,10 @@ Parser excel in a predicate array
     let reply=
         workSheet
         |>Excel.runParser parser
-    let result=
-        reply
         |>fun c->c.userRange
         |>Seq.map(fun c->c.Address)
         |>List.ofSeq
-    match result with
+    match reply with
       |["D2";"D4";"D11";"D13"]->pass()
       |_->fail()
 ```
@@ -32,12 +30,10 @@ Parser excel in a predicate array
     let reply=
         workSheet
         |>Excel.runParser parser
-    let result=
-        reply
         |>fun c->c.userRange
         |>Seq.map(fun c->c.Address)
         |>List.ofSeq
-    match result with
+    match reply with
       |["D2";"D4";"D11";"D13"]->pass()
       |_->fail()        
 ```
@@ -86,7 +82,6 @@ Parser excel in a predicate array
         |>fun c->c.userRange
         |>Seq.map(fun c->c.Address)
         |>List.ofSeq
-    printfn "%A" reply    
     match reply with
       |["D2";"D11"]->pass()
       |_->fail()                  
@@ -103,7 +98,6 @@ Parser excel in a predicate array
     let shift= workSheet
                    |>Excel.runParser parser
                    |>fun c->c.shift
-    printfn "%A" shift    
     match shift with
     |[2;0;0] ->pass()
     |_->fail()                  

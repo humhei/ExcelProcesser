@@ -17,12 +17,10 @@ let MyTests =
         let reply=
             workSheet
             |>Excel.runParser parser
-        let result=
-            reply
             |>fun c->c.userRange
             |>Seq.map(fun c->c.Address)
             |>List.ofSeq
-        match result with
+        match reply with
           |["D2";"D4";"D11";"D13"]->pass()
           |_->fail()
     testCase "Parse with AND Test" <| fun _ -> 
@@ -33,12 +31,10 @@ let MyTests =
         let reply=
             workSheet
             |>Excel.runParser parser
-        let result=
-            reply
             |>fun c->c.userRange
             |>Seq.map(fun c->c.Address)
             |>List.ofSeq
-        match result with
+        match reply with
           |["D2";"D4";"D11";"D13"]->pass()
           |_->fail()        
     testCase "Parse in row Test" <| fun _ -> 
@@ -51,7 +47,6 @@ let MyTests =
             |>fun c->c.userRange
             |>Seq.map(fun c->c.Address)
             |>List.ofSeq
-        printfn "%A" reply    
         match reply with
           |["D2";"D4";"D11";"D13"]->pass()
           |_->fail()         
@@ -95,7 +90,6 @@ let MyTests =
         let shift= workSheet
                        |>Excel.runParser parser
                        |>fun c->c.shift
-        printfn "%A" shift    
         match shift with
         |[2;0;0] ->pass()
         |_->fail()                        
