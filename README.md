@@ -1,5 +1,5 @@
 # ExcelProcesser
-Parser excel file with combinator
+Parse excel file with combinator
 ## NugetPackage
   .net standard 2.0 package
   [ExcelProcesser](https://www.nuget.org/packages/ExcelProcesser/)
