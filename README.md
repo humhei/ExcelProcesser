@@ -107,6 +107,8 @@ Parser excel in a predicate array
     |_->fail()                  
 ```
 ## Debug Test In VsCode
+  * open reposity in VsCode
   * .paket/paket.exe install
   * cd ExcelProcesser.Tests
+  * dotnet restore
   * press F5
