@@ -11,6 +11,8 @@ match cells beginning with GD
 ```fsharp
 let parser:ArrayParser=
     !@pRegex("GD.*")
+let workSheet= "test.xlsx"
+            |>Excel.getWorksheetByIndex 1    
 let reply=
     workSheet
     |>Excel.runParser parser
