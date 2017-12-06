@@ -33,7 +33,8 @@ let parser:ArrayParser=
     !@(pRegex("GD.*") <&> pBkColor Color.Yellow)
 ```
 ### Parse Cells In Sequence
-match cells of which right cell's font color is blue 
+match cells of which text begins with GD,
+and of which right cell's font color is blue 
 ```fsharp
 let parser:ArrayParser=
      !@pRegex("GD.*") .>>. !@(pFontColor Color.Blue)          
