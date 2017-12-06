@@ -9,41 +9,41 @@ Parse excel file with combinator
 ### Parse Cells With Predicate
 match cells beginning with GD
 ```fsharp
-    let parser:ArrayParser=
-        !@pRegex("GD.*")
-    let reply=
-        workSheet
-        |>Excel.runParser parser
-        |>fun c->c.userRange
-        |>Seq.map(fun c->c.Address)
-        |>List.ofSeq
-    match reply with
-      |["D2";"D4";"D11";"D13"]->pass()
-      |_->fail()
+let parser:ArrayParser=
+    !@pRegex("GD.*")
+let reply=
+    workSheet
+    |>Excel.runParser parser
+    |>fun c->c.userRange
+    |>Seq.map(fun c->c.Address)
+    |>List.ofSeq
+match reply with
+  |["D2";"D4";"D11";"D13"]->pass()
+  |_->fail()
 ```
 ### Parse Cells With (Predicates Linked By AND)
 match cells of which text begins with GD,
 and of which background color is yellow
 ```fsharp
-    let parser:ArrayParser=
-        !@(pRegex("GD.*") <&> pBkColor Color.Yellow)
+let parser:ArrayParser=
+    !@(pRegex("GD.*") <&> pBkColor Color.Yellow)
 ```
 ### Parse Cells In Sequence
 match cells of which right cell's font color is blue 
 ```fsharp
-    let parser:ArrayParser=
-         !@pRegex("GD.*") .>>. !@(pFontColor Color.Blue)          
+let parser:ArrayParser=
+     !@pRegex("GD.*") .>>. !@(pFontColor Color.Blue)          
 ```
 
 ### Parse Cells in multi rows
 match cells of which text begins with GD,
 and to which Second perpendicular of which text begins with GD
 ```fsharp
-    let parser:ArrayParser=
-        filter[!@pRegex("GD.*")
-               yShift 1
-               !@pRegex("GD.*")
-                ]            
+let parser:ArrayParser=
+    filter[!@pRegex("GD.*")
+           yShift 1
+           !@pRegex("GD.*")
+            ]            
 ```
 ## Debug Test In VsCode
   * open reposity in VsCode
