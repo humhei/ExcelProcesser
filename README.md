@@ -1,5 +1,5 @@
 # ExcelProcesser
-parser excel in a predicate array
+Parser excel in a predicate array
 ## NugetPackage
   .net standard 2.0 package
   [ExcelProcesser](https://www.nuget.org/packages/ExcelProcesser/)
@@ -106,3 +106,7 @@ parser excel in a predicate array
     |[2;0;0] ->pass()
     |_->fail()                  
 ```
+## Debug Test In VsCode
+  * .paket/paket.exe install
+  * cd ExcelProcesser.Tests
+  * press F5
