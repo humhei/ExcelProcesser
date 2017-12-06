@@ -6,6 +6,11 @@ Parse excel file with combinator
 ### Parse Cells With Predicate
 match cells beginning with GD
 ```fsharp
+open ExcelProcess
+open CellParsers
+open System.Drawing
+open ArrayParsers
+
 let parser:ArrayParser=
     !@pRegex("GD.*")
 let workSheet= "test.xlsx"
