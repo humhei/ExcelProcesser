@@ -4,7 +4,8 @@ Parser excel in a predicate array
   .net standard 2.0 package
   [ExcelProcesser](https://www.nuget.org/packages/ExcelProcesser/)
 ## Usage
-Test file can be found in director ExcelProcesser.Tests
+ * Test file can be found in directory ExcelProcesser.Tests
+ * Following code can be found in directory ExcelProcesser.Tests too
 ### Parser Cells With Predicate
 ```fsharp
     let parser:ArrayParser=
