@@ -1,8 +1,5 @@
-# ExcelProcesser
+# ExcelProcesser [![Build Status](https://travis-ci.org/humhei/ExcelProcesser/branches)](https://travis-ci.org/humhei/ExcelProcesser) [https://www.nuget.org/packages/ExcelProcesser](https://www.nuget.org/packages/ExcelProcesser)
 Parse excel file with combinator
-## NugetPackage
-  .net standard 2.0 package
-  [ExcelProcesser](https://www.nuget.org/packages/ExcelProcesser/)
 ## Usage
  * Test file can be found in directory ExcelProcesser.Tests
  * Following code can be found in directory ExcelProcesser.Tests too
