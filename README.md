@@ -6,7 +6,7 @@ Parse excel file with combinator
 ## Usage
  * Test file can be found in directory ExcelProcesser.Tests
  * Following code can be found in directory ExcelProcesser.Tests too
-### Parser Cells With Predicate
+### Parse Cells With Predicate
 ```fsharp
     let parser:ArrayParser=
         //match cells beginning with GD
@@ -21,7 +21,7 @@ Parse excel file with combinator
       |["D2";"D4";"D11";"D13"]->pass()
       |_->fail()
 ```
-### Parser Cells With (Predicates Linked By AND)
+### Parse Cells With (Predicates Linked By AND)
 ```fsharp
     let parser:ArrayParser=
         //match cells of which text begins with GD,
@@ -37,7 +37,7 @@ Parse excel file with combinator
       |["D2";"D4";"D11";"D13"]->pass()
       |_->fail()        
 ```
-### Parser Cells In Sequence
+### Parse Cells In Sequence
 ```fsharp
     let parser:ArrayParser=
          //match cells of which right cell's font color is blue 
