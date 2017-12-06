@@ -1,30 +1,31 @@
-module CellParsers
-open System.Drawing
-open OfficeOpenXml
-open System.Text.RegularExpressions
-open OfficeOpenXml.Style
-type CellParser=ExcelRangeBase -> bool
-let getColor (color:ExcelColor)=
-    if color.Indexed >0 then color.LookupColor()
-    else "#"+color.Rgb
-let pBkColor (color:Color):CellParser=
-    fun (cell:ExcelRangeBase)->
-        let toHex (color:Color)=sprintf "#%02X%02X%02X%02X" color.A color.R color.G color.B
-        let bkColor=cell.Style.Fill.BackgroundColor|>getColor
-        let targetColor=  toHex color
-        bkColor=targetColor
-let pFontColor (color:Color):CellParser=
-    fun (cell:ExcelRangeBase)->
-        let toHex (color:Color)=sprintf "#%02X%02X%02X%02X" color.A color.R color.G color.B
-        let fontColor=cell.Style.Font.Color|>getColor
-        let targetColor=  toHex color
-        fontColor=targetColor        
-let pRegex pattern:CellParser=
-    fun (cell:ExcelRangeBase)->
-        let m=Regex.Match(cell.Text, pattern)
-        m.Success
-let pAny :CellParser=fun _->true
-let (<&>) (p1:CellParser) (p2:CellParser)=
-    fun (cell:ExcelRangeBase)->
-        p1 cell&&p2 cell
-   
+namespace ExcelProcess
+module CellParsers=
+    open System.Drawing
+    open OfficeOpenXml
+    open System.Text.RegularExpressions
+    open OfficeOpenXml.Style
+    type CellParser=ExcelRangeBase -> bool
+    let getColor (color:ExcelColor)=
+        if color.Indexed >0 then color.LookupColor()
+        else "#"+color.Rgb
+    let pBkColor (color:Color):CellParser=
+        fun (cell:ExcelRangeBase)->
+            let toHex (color:Color)=sprintf "#%02X%02X%02X%02X" color.A color.R color.G color.B
+            let bkColor=cell.Style.Fill.BackgroundColor|>getColor
+            let targetColor=  toHex color
+            bkColor=targetColor
+    let pFontColor (color:Color):CellParser=
+        fun (cell:ExcelRangeBase)->
+            let toHex (color:Color)=sprintf "#%02X%02X%02X%02X" color.A color.R color.G color.B
+            let fontColor=cell.Style.Font.Color|>getColor
+            let targetColor=  toHex color
+            fontColor=targetColor        
+    let pRegex pattern:CellParser=
+        fun (cell:ExcelRangeBase)->
+            let m=Regex.Match(cell.Text, pattern)
+            m.Success
+    let pAny :CellParser=fun _->true
+    let (<&>) (p1:CellParser) (p2:CellParser)=
+        fun (cell:ExcelRangeBase)->
+            p1 cell&&p2 cell
+    

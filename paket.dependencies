@@ -2,5 +2,4 @@ source https://www.nuget.org/api/v2/
 clitool Microsoft.DotNet.Watcher.Tools
 nuget Expecto
 nuget EPPlus.Core
-nuget DocumentFormat.OpenXml
 nuget FParsec

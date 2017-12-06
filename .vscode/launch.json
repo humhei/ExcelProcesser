@@ -14,18 +14,6 @@
             "console": "internalConsole"
         },
         {
-            "name": "Debug Console",
-            "enableStepFiltering": false,
-            "request": "launch",
-            "preLaunchTask": "Build Console",
-            "type": "coreclr",            
-            "program": "${workspaceRoot}/ExcelProcesser/bin/Debug/netcoreapp2.0/ExcelProcesser.dll",
-            "args": [],
-            "cwd": "${workspaceRoot}/ExcelProcesser",
-            "stopAtEntry": false,
-            "console": "internalConsole"
-        },
-        {
             "name": ".NET Core Attach",
             "type": "coreclr",
             "request": "attach",

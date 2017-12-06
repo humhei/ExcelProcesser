@@ -1,18 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp2.0</TargetFramework>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <VersionPrefix>0.1.0</VersionPrefix>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Linq.fs" />
     <Compile Include="CellParsers.fs" />
-    <Compile Include="LinearParsers.fs" />
-    <Compile Include="MatrixParsers.fs" />
     <Compile Include="ArrayParsers.fs" />
     <Compile Include="Excel.fs" />
-   <Compile Include="Parser.fs" />
-    <Compile Include="Program.fs" />
   </ItemGroup>
   <Import Project="..\.paket\Paket.Restore.targets" />
 </Project>
