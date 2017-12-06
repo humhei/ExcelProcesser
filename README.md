@@ -93,7 +93,7 @@ Test file can be found in director ExcelProcesser.Tests
 ### Get Shift Number when Parsing Cells in multi rows
 ```fsharp
         //vertically shift cells:
-        //adding one item to array will grow array of 1,and yShift will grow array of n
+        //adding one item to array will grow array with 1,and yShift will grow array with n
     let parser:ArrayParser=
         filter[!@pRegex("GD.*")
                yShift 1
