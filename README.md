@@ -38,8 +38,15 @@ match cells of which text begins with GD,
 and of which right cell's font color is blue 
 ```fsharp
 let parser:ArrayParser=
-     !@pRegex("GD.*") +>> !@(pFontColor Color.Blue)          
+     !@pRegex("GD.*") +>>+ !@(pFontColor Color.Blue)          
 ```
+Below operators(They are similiar)
+| Exprocessor  | FParsec |
+| :-------------: | :-------------: |
+| +>>+ | .>>. |
+| +>> | .>> |
+| >>+ | >>+ |
+
 
 ### Parse Cells in multi rows
 match cells of which text begins with GD,
