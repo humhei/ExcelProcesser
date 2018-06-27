@@ -20,7 +20,7 @@ module Stream =
             userRange = 
                 s.userRange |> Seq.map (fun ur ->
                     let l = s.xShifts.Length
-                    let x = s.xShifts.[l - 1 - s.yShift]
+                    let x = s.xShifts.[l - 1 - s.yShift] + 1
                     ur.Offset(0,0,ur.Rows,x)
                 ) 
             xShifts = s.xShifts |> List.mapTail(fun _ -> 0)
