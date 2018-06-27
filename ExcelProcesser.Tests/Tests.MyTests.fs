@@ -41,7 +41,7 @@ let MyTests =
     testCase "Parse in row Test" <| fun _ -> 
         let parser:ArrayParser=
             //match cells of which right cell's font color is blue 
-            !@pRegex("GD.*") +>>+ !@(pFontColor Color.Blue)
+            !@pRegex("GD.*") +>> !@(pFontColor Color.Blue)
         let reply=
             workSheet
             |>ArrayParser.run parser
@@ -55,8 +55,8 @@ let MyTests =
     testCase "Shift in row Test" <| fun _ -> 
         let parser:ArrayParser=
             //horizontally shift cells:
-            //the +>>+ operator will increase 1, and xShift will increase n
-            !@(pAny) +>>+ !@(pFontColor Color.Blue) +>>+ xShift 2
+            //the +>> operator will increase 1, and xShift will increase n
+            !@(pAny) +>> !@(pFontColor Color.Blue) +>> xShift 2
         let shift= workSheet
                        |>ArrayParser.run parser
                        |>fun c->c.shift
@@ -86,7 +86,7 @@ let MyTests =
         let parser:ArrayParser=
             filter[!@pRegex("GD.*")
                    yShift 1
-                   !@pRegex("GD.*") +>>+ xShift 2
+                   !@pRegex("GD.*") +>> xShift 2
                     ]
         let shift= workSheet
                        |>ArrayParser.run parser
@@ -95,9 +95,8 @@ let MyTests =
         |[2;0;0] ->pass()
         |_->fail()      
 
-    ftestCase "Greed operator" <| fun _ -> 
-            //vertically shift cells:
-            //adding one item to array will grow array with n,and yShift will grow array with n
+    testCase "many operator" <| fun _ -> 
+            //parse cell to range
         let parser:ArrayParser=
             let sizeParser = !@pFParsec(pint32.>>pchar '#') |> xlMany
             !@pRegex("STYLE.*") >>+ sizeParser
@@ -105,6 +104,11 @@ let MyTests =
         let reply=
             workSheet
             |> ArrayParser.run parser
-        printf "Hello"        
-        pass()               
+            |>fun c->c.userRange
+            |>Seq.map(fun c->c.Address)
+            |>List.ofSeq
+
+        match reply with
+          |["B18:E18"]->pass()
+          |_->fail()   
   ]

@@ -70,7 +70,7 @@ module ArrayParser=
                         ) 
                     shift = stream.shift |> List.mapHead (fun c -> c - 1)
                 }
-            printf "Hello"                        
+                                    
             n            
    
     let xlMany (p:ArrayParser) :ArrayParser =
