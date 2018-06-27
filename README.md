@@ -50,6 +50,26 @@ let parser:ArrayParser=
            !@pRegex("GD.*")
             ]            
 ```
+### Parse with many operator
+Match cells whose left item beigin with STYLE
+and whose text begin with number
+Then batch the result as ExcelRange eg. "B18:E18"
+```fsharp
+    let parser:ArrayParser=
+        let sizeParser = !@pFParsec(pint32.>>pchar '#') |> xlMany
+        !@pRegex("STYLE.*") >>+ sizeParser
+                
+    let reply=
+        workSheet
+        |> ArrayParser.run parser
+        |>fun c->c.userRange
+        |>Seq.map(fun c->c.Address)
+        |>List.ofSeq  
+        
+    match reply with
+        |["B18:E18"]->pass()
+        |_->fail()   
+```
 ## Debug Test In VsCode
   * open reposity in VsCode
   * .paket/paket.exe install
