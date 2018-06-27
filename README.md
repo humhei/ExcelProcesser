@@ -48,16 +48,35 @@ Below operators are similiar
 | +>> | .>> |
 | >>+ | >>. |
 
+If operator prefix with `^`.
+eg. `^+>>+`
+This means it is used to parse multiple rows
+
+```fsharp
+        let parser:ArrayParser=
+            !@pRegex("GD.*")
+            ^>>+ yPlaceholder 1
+            ^>>+ !@pRegex("GD.*") +>> xPlaceholder 2
+                    
+        let addresses = workSheet
+                       |> ArrayParser.run parser
+                       |> Stream.getUserRange
+                       |> Seq.map (fun r -> r.Address)
+                       |> List.ofSeq
+
+        match addresses with
+        |["D4";"D13"] ->pass()
+        |_->fail()    
+```
 
 ### Parse Cells in multi rows
 match cells of which text begins with GD,
 and to which Second perpendicular of which text begins with GD
 ```fsharp
-let parser:ArrayParser=
-    filter[!@pRegex("GD.*")
-           yPlaceholder 1
-           !@pRegex("GD.*")
-            ]            
+        let parser:ArrayParser=
+            !@pRegex("GD.*")
+            ^>>+ yPlaceholder 1
+            ^>>+ !@pRegex("GD.*")
 ```
 ### Parse with many operator
 Match cells whose left item beigin with STYLE
