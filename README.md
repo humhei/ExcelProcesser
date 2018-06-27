@@ -46,7 +46,7 @@ Below operators are similiar
 | :-------------: | :-------------: |
 | +>>+ | .>>. |
 | +>> | .>> |
-| >>+ | >>+ |
+| >>+ | >>. |
 
 
 ### Parse Cells in multi rows
