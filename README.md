@@ -5,7 +5,7 @@ Parse excel file with combinator
  * Following code can be found in directory ExcelProcesser.Tests too
 ### Parse Cells With Predicate
 match cells beginning with GD
-![image](https://github.com/humhei/Resources/blob/Resources/image.png)
+![image](https://github.com/humhei/Resources/blob/Resources/Untitled.png)
 ```fsharp
 open ExcelProcess
 open CellParsers
