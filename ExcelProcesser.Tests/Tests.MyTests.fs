@@ -56,10 +56,10 @@ let MyTests =
         let parser:ArrayParser=
             //horizontally shift cells:
             //the +>> operator will increase 1, and xShift will increase n
-            !@(pAny) +>> !@(pFontColor Color.Blue) +>> xShift 2
+            !@(pAny) +>> !@(pFontColor Color.Blue) +>> xPlaceholder 2
         let shift= workSheet
                        |>ArrayParser.run parser
-                       |>fun c->c.shift
+                       |>fun c->c.xShifts
         match shift with
         |[3] ->pass()
         |_->fail()    
@@ -68,7 +68,7 @@ let MyTests =
          //and to which Second perpendicular of which text begins with GD
         let parser:ArrayParser=
             filter[!@pRegex("GD.*")
-                   yShift 1
+                   yPlaceholder 1
                    !@pRegex("GD.*")
                     ]
         let reply=
@@ -85,15 +85,61 @@ let MyTests =
             //adding one item to array will grow array with n,and yShift will grow array with n
         let parser:ArrayParser=
             filter[!@pRegex("GD.*")
-                   yShift 1
-                   !@pRegex("GD.*") +>> xShift 2
+                   yPlaceholder 1
+                   !@pRegex("GD.*") +>> xPlaceholder 2
                     ]
         let shift= workSheet
                        |>ArrayParser.run parser
-                       |>fun c->c.shift
+                       |>fun c->c.xShifts
         match shift with
-        |[2;0;0] ->pass()
+        |[0;0;2] ->pass()
         |_->fail()      
+
+    testCase "Shift in multi rows with ^+>> operator" <| fun _ -> 
+        let parser:ArrayParser=
+            !@pRegex("GD.*")
+            ^+>> yPlaceholder 1
+            ^+>> !@pRegex("GD.*") +>> xPlaceholder 2
+                    
+        let stream = workSheet
+                       |>ArrayParser.run parser
+        let shift = stream.xShifts               
+        match shift with
+        |[0;0;2] ->pass()
+        |_->fail()     
+
+    testCase "Shift in multi rows with ^>>+ operator" <| fun _ -> 
+        let parser:ArrayParser=
+            !@pRegex("GD.*")
+            ^>>+ yPlaceholder 1
+            ^>>+ !@pRegex("GD.*") +>> xPlaceholder 2
+                    
+        let addresses = workSheet
+                       |> ArrayParser.run parser
+                       |> Stream.getUserRange
+                       |> Seq.map (fun r -> r.Address)
+                       |> List.ofSeq
+
+        match addresses with
+        |["D4";"D13"] ->pass()
+        |_->fail()    
+
+    testCase "Shift in multi rows with ^+>>+ operator" <| fun _ -> 
+    
+        let parser:ArrayParser=
+            !@pRegex("GD.*")
+            ^+>>+ yPlaceholder 1
+            ^+>>+ !@pFParsec(pstring "GD")
+
+        let addresses = workSheet
+                       |> ArrayParser.run parser
+                       |> Stream.getUserRange
+                       |> Seq.map (fun r -> r.Address)
+                       |> List.ofSeq
+                       
+        match addresses with
+        |["D2:D4";"D11:D13"] ->pass()
+        |_->fail()    
 
     testCase "many operator" <| fun _ -> 
             //parse cell to range

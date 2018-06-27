@@ -47,7 +47,7 @@ and to which Second perpendicular of which text begins with GD
 ```fsharp
 let parser:ArrayParser=
     filter[!@pRegex("GD.*")
-           yShift 1
+           yPlaceholder 1
            !@pRegex("GD.*")
             ]            
 ```
