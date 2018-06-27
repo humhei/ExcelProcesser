@@ -5,6 +5,7 @@ Parse excel file with combinator
  * Following code can be found in directory ExcelProcesser.Tests too
 ### Parse Cells With Predicate
 match cells beginning with GD
+![image](https://github.com/humhei/Resources/blob/Resources/image.png)
 ```fsharp
 open ExcelProcess
 open CellParsers
@@ -37,7 +38,7 @@ match cells of which text begins with GD,
 and of which right cell's font color is blue 
 ```fsharp
 let parser:ArrayParser=
-     !@pRegex("GD.*") +>>+ !@(pFontColor Color.Blue)          
+     !@pRegex("GD.*") +>> !@(pFontColor Color.Blue)          
 ```
 
 ### Parse Cells in multi rows
