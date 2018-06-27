@@ -1,5 +1,6 @@
 namespace ExcelProcess
 module CellParsers=
+    open FParsec
     open System.Drawing
     open OfficeOpenXml
     open System.Text.RegularExpressions
@@ -20,10 +21,17 @@ module CellParsers=
             let fontColor=cell.Style.Font.Color|>getColor
             let targetColor=  toHex color
             fontColor=targetColor        
-    let pRegex pattern:CellParser=
+    let pRegex pattern:CellParser =
         fun (cell:ExcelRangeBase)->
             let m=Regex.Match(cell.Text, pattern)
             m.Success
+    let pFParsec (p: Parser<_,_>) =
+        fun (cell:ExcelRangeBase) ->
+            let text = cell.Text
+            match run p text with 
+            | ParserResult.Success _ -> true
+            | _ -> false
+
     let pAny :CellParser=fun _->true
     let (<&>) (p1:CellParser) (p2:CellParser)=
         fun (cell:ExcelRangeBase)->

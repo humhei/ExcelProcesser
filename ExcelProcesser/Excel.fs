@@ -5,7 +5,6 @@ namespace ExcelProcess
 module Excel=
     open OfficeOpenXml
     open System.IO
-    open ArrayParsers
     let getWorksheets filename = seq {
         let file = FileInfo(filename) 
         let xlPackage = new ExcelPackage(file)
@@ -37,10 +36,6 @@ module Excel=
                 yield content:>ExcelRangeBase
               
     }
-    let runArraryParser (parser:ArrayParser)  worksheet=
-        worksheet
-        |>getUserRange
-        |>Seq.cache
-        |>fun c->{userRange=c;shift=[0]}
-        |>parser     
-    let runParser= runArraryParser
+
+    let translate address (xOffset:int) (yOffset:int) =
+        ExcelCellBase.TranslateFromR1C1(ExcelCellBase.TranslateToR1C1(address, -yOffset, -xOffset), 0, 0)

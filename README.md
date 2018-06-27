@@ -17,7 +17,7 @@ let workSheet= "test.xlsx"
             |>Excel.getWorksheetByIndex 1    
 let reply=
     workSheet
-    |>Excel.runParser parser
+    |>ArrayParser.run parser
     |>fun c->c.userRange
     |>Seq.map(fun c->c.Address)
     |>List.ofSeq
@@ -37,7 +37,7 @@ match cells of which text begins with GD,
 and of which right cell's font color is blue 
 ```fsharp
 let parser:ArrayParser=
-     !@pRegex("GD.*") .>>. !@(pFontColor Color.Blue)          
+     !@pRegex("GD.*") +>>+ !@(pFontColor Color.Blue)          
 ```
 
 ### Parse Cells in multi rows
