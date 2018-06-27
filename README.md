@@ -40,7 +40,8 @@ and of which right cell's font color is blue
 let parser:ArrayParser=
      !@pRegex("GD.*") +>>+ !@(pFontColor Color.Blue)          
 ```
-Below operators(They are similiar)
+Below operators are similiar
+
 | Exprocessor  | FParsec |
 | :-------------: | :-------------: |
 | +>>+ | .>>. |
