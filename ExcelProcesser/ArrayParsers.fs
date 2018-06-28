@@ -31,7 +31,6 @@ module Stream =
                 s.userRange |> Seq.map (fun ur ->
                     let y=s.xShifts.Length - s.yShift
                     let offseted = ur.Offset(0,0,y,ur.Columns)
-                    printf ""
                     offseted
                 ) 
                 |> List.ofSeq
@@ -108,14 +107,38 @@ module ArrayParser=
     let xlMany (p:ArrayParser) :ArrayParser =
         fun stream ->
             let s = p stream
-            let rec loop s =
-                let shift = s.xShifts |> List.mapTail (fun c-> c+1)
-                let newS = {s with xShifts = shift} |> p
-                if Seq.isEmpty newS.userRange then 
-                    s    
-                else loop newS                                    
-            loop s |> Stream.applyXShift            
+            let r =
+                seq {
+                    let rec loop s =
+                        let shift = s.xShifts |> List.mapTail (fun c-> c+1)
+                        let newS = {s with xShifts = shift} |> p
+                        let lifted =
+                            { s with
+                                userRange =  
+                                let sAdds =  s.userRange |> Seq.map (fun c -> c.Address)
+                                let newAdds =  newS.userRange |> Seq.map (fun c -> c.Address)
+                                Seq.except newAdds sAdds |> Seq.map (fun add ->
+                                    s.userRange |> Seq.find (fun c -> c.Address = add)
+                                )
+                            }        
+                        seq {                   
+                            yield lifted
+                            if Seq.isEmpty newS.userRange then 
+                                yield! []
+                            else 
+                                yield! loop newS   
+                        }
 
+
+                    yield! loop s
+                } |> Seq.map Stream.applyXShift
+            { s with 
+                userRange =
+                    r |> Seq.collect (fun c ->
+                        c.userRange
+                    ) |> Excel.distinctRanges
+                xShifts = List.replicate (Seq.length r) 0                
+            }            
 
     let filter (options:ArrayParser list) :ArrayParser=
         options |> List.reduce (^+>>)
