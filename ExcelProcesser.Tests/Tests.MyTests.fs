@@ -172,11 +172,11 @@ let MyTests =
           |["B18:E18"]->pass()
           |_->fail()   
 
-    testCase "many operator for multiple seq cells" <| fun _ -> 
+    testCase "row many operator" <| fun _ -> 
             //parse cell to range
         let parser:ArrayParser=
-            let sizeParser = !@pFParsec(pint32.>>pchar '#') |> xlMany
-            sizeParser
+            let parser = !@pFParsec(asciiLetter .>> pint32) |> rowMany
+            parser
                    
         let reply=
             workSheet
@@ -186,6 +186,6 @@ let MyTests =
             |>List.ofSeq
 
         match reply with
-          |["B22:D22";"B18:E18"]->pass()
+          |["A2:A4";"B6:B7"]->pass()
           |_->fail() 
   ]

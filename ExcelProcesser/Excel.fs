@@ -66,7 +66,9 @@ module Excel=
             let a1 = add2.Split(':')
             let c10,r10 = runWithValueBack a1.[0]
             let c11,r11 = runWithValueBack a1.[1]
-            inMiddle c10 c11 c00 && inMiddle r00 r10 r11
+            let p1 = inMiddle c10 c11 c00
+            let p2 = inMiddle r10 r11 r00
+            p1 && p2
 
         elif Address.isRange add1 && Address.isRange add2 then
             let a0 =  add1.Split(':')
@@ -91,4 +93,9 @@ module Excel=
                 else 
                     accum @ [range]     
             ) []
+            |> List.ofSeq
+            |> List.sortBy (fun s ->
+                let cell = s |> Seq.head
+                cell.Address
+            )
         r        
