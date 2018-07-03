@@ -48,35 +48,36 @@ module Excel=
 
     let translate address (xOffset:int) (yOffset:int) =
         ExcelCellBase.TranslateFromR1C1(ExcelCellBase.TranslateToR1C1(address, -yOffset, -xOffset), 0, 0)
+    let private parseCellAddress s =
+        let p = (asciiUpper .>>. pint64) 
+        run p s 
+        |> function
+            | ParserResult.Success (s,_,_) -> s 
+            | _ -> failwithf "failed parsed with %A" s
     /// r2 include r1
     let contain (r1: ExcelRangeBase) (r2: ExcelRangeBase) =
-        let runWithValueBack s =
-            let p = (asciiUpper .>>. pint64) 
-            run p s 
-            |> function
-                | ParserResult.Success (s,_,_) -> s 
-                | _ -> failwithf "failed parsed with %A" s
+
 
         let add1 = r1.Address
         let add2 = r2.Address
         let inMiddle l r s = 
             s >= l && s <= r
         if Address.isCell add1 && Address.isRange add2 then
-            let c00,r00 = runWithValueBack add1
+            let c00,r00 = parseCellAddress add1
             let a1 = add2.Split(':')
-            let c10,r10 = runWithValueBack a1.[0]
-            let c11,r11 = runWithValueBack a1.[1]
+            let c10,r10 = parseCellAddress a1.[0]
+            let c11,r11 = parseCellAddress a1.[1]
             let p1 = inMiddle c10 c11 c00
             let p2 = inMiddle r10 r11 r00
             p1 && p2
 
         elif Address.isRange add1 && Address.isRange add2 then
             let a0 =  add1.Split(':')
-            let c00,r00 = runWithValueBack a0.[0]
-            let c01,r01 = runWithValueBack a0.[1]
+            let c00,r00 = parseCellAddress a0.[0]
+            let c01,r01 = parseCellAddress a0.[1]
             let a1 = add2.Split(':')
-            let c10,r10 = runWithValueBack a1.[0]
-            let c11,r11 = runWithValueBack a1.[1]
+            let c10,r10 = parseCellAddress a1.[0]
+            let c11,r11 = parseCellAddress a1.[1]
             c00 |> inMiddle c10 c11
             && c01 |> inMiddle c10 c11
             && r00 |> inMiddle r10 r11
@@ -96,6 +97,7 @@ module Excel=
             |> List.ofSeq
             |> List.sortBy (fun s ->
                 let cell = s |> Seq.head
-                cell.Address
+                let c00,r00 = parseCellAddress cell.Address
+                c00,r00
             )
         r        

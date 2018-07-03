@@ -173,7 +173,6 @@ let MyTests =
           |_->fail()   
 
     testCase "row many operator" <| fun _ -> 
-            //parse cell to range
         let parser:ArrayParser=
             let parser = !@pFParsec(asciiLetter .>> pint32) |> rowMany
             parser
