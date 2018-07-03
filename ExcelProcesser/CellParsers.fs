@@ -21,10 +21,17 @@ module CellParsers=
             let fontColor=cell.Style.Font.Color|>getColor
             let targetColor=  toHex color
             fontColor=targetColor        
-    let pRegex pattern:CellParser =
+
+    let pText (f: string -> bool) =
         fun (cell:ExcelRangeBase)->
-            let m=Regex.Match(cell.Text, pattern)
+            f cell.Text
+
+    let pRegex pattern:CellParser =
+        pText (fun text ->
+            let m=Regex.Match(text, pattern)
             m.Success
+        )
+
     let pFParsec (p: Parser<_,_>) =
         fun (cell:ExcelRangeBase) ->
             let text = cell.Text

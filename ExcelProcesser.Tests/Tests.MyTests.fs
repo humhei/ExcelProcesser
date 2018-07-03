@@ -122,7 +122,7 @@ let MyTests =
 
         match addresses with
         |["D4";"D13"] ->pass()
-        |_->fail()    
+        |_->fail()     
 
     testCase "Shift in multi rows with ^+>>+ operator" <| fun _ -> 
     
@@ -141,7 +141,22 @@ let MyTests =
         |["D2:D4";"D11:D13"] ->pass()
         |_->fail()    
 
-    testCase "many operator" <| fun _ -> 
+    testCase "many operator for single cell" <| fun _ -> 
+
+        let parser:ArrayParser = !@pRegex("GD.*") |> xlMany
+                   
+        let reply=
+            workSheet
+            |> ArrayParser.run parser
+            |>fun c->c.userRange
+            |>Seq.map(fun c->c.Address)
+            |>List.ofSeq
+
+        match reply with
+          |["D2";"D4";"D11";"D13"]->pass()
+          |_->fail()
+
+    testCase "many operator for seq cells" <| fun _ -> 
             //parse cell to range
         let parser:ArrayParser=
             let sizeParser = !@pFParsec(pint32.>>pchar '#') |> xlMany
@@ -157,4 +172,21 @@ let MyTests =
         match reply with
           |["B18:E18"]->pass()
           |_->fail()   
+
+    testCase "many operator for multiple seq cells" <| fun _ -> 
+            //parse cell to range
+        let parser:ArrayParser=
+            let sizeParser = !@pFParsec(pint32.>>pchar '#') |> xlMany
+            sizeParser
+                   
+        let reply=
+            workSheet
+            |> ArrayParser.run parser
+            |>fun c->c.userRange
+            |>Seq.map(fun c->c.Address)
+            |>List.ofSeq
+
+        match reply with
+          |["B22:D22";"B18:E18"]->pass()
+          |_->fail() 
   ]
