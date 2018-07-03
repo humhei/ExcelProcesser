@@ -3,15 +3,18 @@ module Runner
 open Expecto
 open Expecto.Logging
 open Tests.MyTests
+open ExcelProcess
+
 let testConfig =  
     { defaultConfig with 
          parallelWorkers = 1
          verbosity = Debug }
 
-let liteDbTests = 
+let tests = 
     testList "All tests" [  
         MyTests
     ]
 
 [<EntryPoint>]
-let main _ = runTests testConfig liteDbTests
+let main _ = 
+    runTests testConfig tests

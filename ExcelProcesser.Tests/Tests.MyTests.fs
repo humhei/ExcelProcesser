@@ -7,8 +7,7 @@ open ArrayParser
 open FParsec
 let pass() = Expect.isTrue true "passed"
 let fail() = Expect.isTrue false "failed"
-let workSheet= "test.xlsx"
-            |>Excel.getWorksheetByIndex 1
+let workSheet = __SOURCE_DIRECTORY__ + @"\test.xlsx" |> Excel.getWorksheetByIndex 0
 let MyTests =
   testList "ParserTests" [
     testCase "Parse cell Test" <| fun _ -> 

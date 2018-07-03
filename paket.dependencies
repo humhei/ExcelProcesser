@@ -2,6 +2,6 @@ source https://api.nuget.org/v3/index.json
 storage: none
 clitool Microsoft.DotNet.Watcher.Tools
 nuget Expecto
-nuget EPPlus.Core
+nuget EPPlus
 nuget FParsec
 nuget FSharp.Core 4.3.4
