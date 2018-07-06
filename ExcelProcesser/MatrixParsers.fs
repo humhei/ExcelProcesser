@@ -2,112 +2,116 @@ namespace ExcelProcess
 open OfficeOpenXml
 open System.IO
 
-
-type MatrixParser<'result> =
+type MatrixStream<'state> =
     {
-        Parser: ArrayParser
-        MiddleTransform: XLStream -> XLStream
-        ResultGenerator: (XLStream * XLStream) -> seq<'result>        
+        XLStream : XLStream 
+        State: seq<'state>
     }
+
+[<RequireQualifiedAccess>]
+module MatrixStream = 
+    let ofXLStream stream =
+        {
+            XLStream = stream
+            State = stream.userRange |> Seq.map ignore           
+        }
+    let incrXShift ms =
+        {
+            ms with 
+                XLStream = XLStream.incrXShift ms.XLStream
+        }    
+    let shuffle f ms =
+        let state,ranges = 
+            ms.XLStream.userRange 
+            |> Seq.zip ms.State    
+            |> f
+            |> List.ofSeq
+            |> List.unzip
+        { ms with 
+            State = state
+            XLStream = {ms.XLStream with userRange = ranges}}
+    let filter f ms =
+        ms |> shuffle (fun zips ->
+            zips |> Seq.filter f
+        )              
+
+type MatrixParser<'state1,'state2> = MatrixStream<'state1> -> MatrixStream<'state2>
 module MatrixParsers =
     open FParsec
     open ArrayParser
     open CellParsers
-    let useNewStream f s =
-        let os,ns = s
-        ns.userRange |>  Seq.map f
-    let inline (!!) p =
-        {
-            Parser = p
-            MiddleTransform = id
-            ResultGenerator = useNewStream ignore 
-        }
+
+    let  (!!) (p: ArrayParser) = 
+        fun ms ->
+            { XLStream = p ms.XLStream; State = ms.State |> Seq.map ignore }
+
     let runWithResultBack parser (s:string) =
         CharParsers.run parser s 
         |> function 
             | ParserResult.Success (x,_,_) -> x
-            | ParserResult.Failure _ -> failwithf "failed parse %A" s
-    type Ext = Ext
-        with
-            static member RunMatrixParser (ext : Ext, p : Parser<_,unit>,worksheet) = 
-                let parser = !@(pFParsec p)
-                let stream = 
-                    worksheet
-                    |>Excel.getUserRange
-                    |>Seq.cache
-                    |>fun c->{userRange=c;xShifts=[0]}
-                    |>parser     
-                stream.userRange |> Seq.map (fun r -> runWithResultBack p r.Text)
-            static member RunMatrixParser (ext : Ext, p : Parser<'result,unit> * ('result -> bool),worksheet) =
-                let p,pre = p 
-                let parser = !@(pFParsec p)
-                let stream = 
-                    worksheet
-                    |>Excel.getUserRange
-                    |>Seq.cache
-                    |>fun c->{userRange=c;xShifts=[0]}
-                    |>parser     
-                let r = stream.userRange |> Seq.map (fun r -> runWithResultBack p r.Text)   
-                
-                r |> Seq.filter pre
+            | ParserResult.Failure _ -> failwithf "failed parse %A" s   
+                               
+    let  (!^^) (p:Parser<'a,unit>) f : MatrixParser<_,'a> = 
+        let ap = !@(pFParsecWith p f)
+        fun mp ->
+            let newXLS = ap mp.XLStream
+            let xshift = newXLS.xShifts |> List.last
+            {
+                XLStream = newXLS
+                State = newXLS.userRange 
+                    |> Seq.map (fun cell -> cell.Offset(0,xshift))
+                    |> Seq.map(fun cell -> runWithResultBack p cell.Text)                
+            }
+    let  (!^) (p:Parser<'a,unit>) : MatrixParser<_,'a> = 
+        (!^^) p (fun _ -> true)
+    let private xlpipe2 (x : MatrixParser<_,'a>) (y: MatrixParser<_,'b>) (f: 'a -> 'b ->'c) =
+        fun ms ->
+            let s1 = x ms |> MatrixStream.incrXShift
+            let s2 = y s1
+            let left = 
+                s1 |> MatrixStream.filter (fun (_,cell1) ->
+                    s2.XLStream.userRange 
+                    |> Seq.map (fun cell2 -> cell2.Address)
+                    |> Seq.contains cell1.Address 
+                )
 
-            static member RunMatrixParser (ext : Ext, mp : MatrixParser<'result>,worksheet) =
-                let oldStream =
-                    worksheet
-                    |>Excel.getUserRange
-                    |>Seq.cache
-                    |>fun c->{userRange=c;xShifts=[0]}
-                let newStream = mp.Parser oldStream
-                mp.ResultGenerator (oldStream,newStream)          
-                              
+            let right = s2.State             
+            { 
+                XLStream =            
+                    left.XLStream
+                State = Seq.zip left.State right |> Seq.map (fun (ls,rs) ->
+                    f ls rs
+                )
+            }   
 
 
-    let inline runMatrixParser (x : ^a) (worksheet:ExcelWorksheet) =
-        ((^b or ^a) : (static member RunMatrixParser : ^b * ^a * ^c -> ^d) (Ext, x, worksheet ))
-    let  runMatrixParser2 (mp : MatrixParser<'result>) (worksheet:ExcelWorksheet) =
-        let oldStream =
+
+    let (<==>) (x : MatrixParser<_,'a>) (y: MatrixParser<_,'b>) : MatrixParser<_,'a * 'b> =
+        xlpipe2 x y (fun a b -> a,b)
+    let private xlpipe3 (x : MatrixParser<_,'a>) (y: MatrixParser<_,'b>) (z: MatrixParser<_,'c>) (f: 'a -> 'b ->'c -> 'd) =
+        xlpipe2 (x <==> y) z (fun (a,b) c ->
+            f a b c
+        )
+    let r3 =
+        fun x y z ->
+            xlpipe3 x y z (fun a b c ->
+                a,b,c
+            )   
+    let private xlpipe4 (x : MatrixParser<_,'a>) (y: MatrixParser<_,'b>) (z: MatrixParser<_,'c>) (m: MatrixParser<_,'d>) (f: 'a -> 'b ->'c -> 'd -> 'e) =
+        xlpipe2 (r3 x y z) m (fun (a,b,c) d ->
+            f a b c d
+        )
+    let r4 =
+        fun x y z m->
+            xlpipe4 x y z m (fun a b c d->
+                a,b,c,d
+            )        
+    let runMatrixParser (p: MatrixParser<_,_>) (worksheet:ExcelWorksheet) =
+        let stream = 
             worksheet
             |>Excel.getUserRange
             |>Seq.cache
             |>fun c->{userRange=c;xShifts=[0]}
-        let newStream = mp.Parser oldStream
-        mp.ResultGenerator (oldStream,newStream)  
-    let inline (!^) (p:Parser<_,unit>) =
-        {
-            Parser = !@(pFParsec p)
-            MiddleTransform = id
-            ResultGenerator = useNewStream (fun cell -> runWithResultBack p cell.Text)
-        }        
-    let inline (<==>) (x : MatrixParser<_>) (y: MatrixParser<_>) =
-        let ensureParseOnly mp = 
-            { mp with 
-                Parser =  
-                    fun (stream: XLStream) ->
-                        let newS = mp.Parser stream
-                        if newS.xShifts.Length = stream.xShifts.Length
-                            then newS
-                        else failwithf "parser %A should parse one row" y 
-            }     
-
-        let y = ensureParseOnly y
-        let resultGenerator s =
-            let os,ns = s
-            let left = x.ResultGenerator (os,ns)
-            let ns2 = ns |> XLStream.applyXShiftOfSubStract os
-            let right = y.ResultGenerator (ns,ns2)
-            Seq.zip left right
-        {
-            Parser = x.Parser +>> y.Parser
-            MiddleTransform = XLStream.applyXShift
-            ResultGenerator = resultGenerator
-        }
-    
-    // let runMatrixParser (p: Parser<_,unit>) (worksheet:ExcelWorksheet) =
-    //     let parser = !@(pFParsec p)
-    //     let stream = 
-    //         worksheet
-    //         |>Excel.getUserRange
-    //         |>Seq.cache
-    //         |>fun c->{userRange=c;xShifts=[0]}
-    //         |>parser     
-    //     stream.userRange |> Seq.map (fun r -> runWithResultBack p r.Text)
+            |>MatrixStream.ofXLStream
+        p stream
+        |> fun mp -> mp.State

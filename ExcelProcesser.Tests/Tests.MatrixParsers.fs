@@ -22,31 +22,68 @@ let pZip =
         (pint32 .>> pstring "双" .>> skip) 
         (pint32 .>> pstring "箱" .>> skip) 
         (pstring "条形码" >>. skipAnyOf ['：';':'] >>. pint64)
-let pSize = many1 (pchar ' ') |> sepEndBy1 pint32
+let pSize : Parser<int32 list,unit> = many1 (pchar ' ') |> sepEndBy1 pint32
 let isSize numbers =
     let p1=
         numbers |> List.forall (fun number -> number > 18 && number < 47 )
     let p2 = numbers.Length > 1
     p1 && p2        
 let MatrixParserTests =
-  ftestList "MatrixParserTests" [
+  testList "MatrixParserTests" [
     testCase "Parse zips" <| fun _ ->
-        runMatrixParser pZip workSheet
+        runMatrixParser (!^pZip) workSheet
         |> List.ofSeq
         |> List.head
         |> function 
             | ("FOTZO-1",4032,84,7453089535063L) -> pass()
             | _ -> fail()
     testCase "Parse sizes" <| fun _ ->
-        runMatrixParser (pSize,isSize) workSheet
+        runMatrixParser (!^^ pSize isSize) workSheet
         |> List.ofSeq
         |> function 
             | [ [35;36;37;38;39;40]
                 [39;40;41;42;43;44]
                 [35;36;37;38;39;40] ] -> pass()
             | _ -> fail()
-    ftestCase "Parse in sequence with tuple return" <| fun _ ->
-        let t = runMatrixParser2 (((!^pZip) <==> !^ (pstring "hello")) <==> !!(xPlaceholder 1)) workSheet |> List.ofSeq
-        printf ""
-        ()
+    testCase "Parse in sequence with tuple return" <| fun _ ->
+        let p2 = !^(pstring "hello")
+        let p3 = !^(pstring "gogo")
+        runMatrixParser (!^pZip <==> p2 <==> p3) workSheet
+        |> List.ofSeq
+        |> List.head
+        |> function 
+            | (("FOTZO-1",4032,84,7453089535063L),"hello"),"gogo" -> pass()
+            | _ -> fail()
+
+    testCase "Parse in sequence with pipe3" <| fun _ ->
+        let p2 = !^(pstring "hello")
+        let p3 = !^(pstring "gogo")
+        runMatrixParser (r3 !^pZip p2 p3) workSheet
+        |> List.ofSeq
+        |> List.head
+        |> function 
+            | ("FOTZO-1",4032,84,7453089535063L),"hello","gogo" -> pass()
+            | _ -> fail()   
+
+    testCase "Parse in sequence with pipe4" <| fun _ ->
+        let p2 = !^(pstring "hello")
+        let p3 = !^(pstring "gogo")
+        let p4 = !^(pstring "yes")
+        runMatrixParser (r4 !^pZip p2 p3 p4) workSheet
+        |> List.ofSeq
+        |> List.head
+        |> function 
+            | ("FOTZO-1",4032,84,7453089535063L),"hello","gogo","yes" -> pass()
+            | _ -> fail()   
+
+    testCase "Parse in two rows with tuple return" <| fun _ ->
+        let p2 = !^(pstring "hello")
+        let p3 = !^(pstring "gogo")
+        let p4 = !^(pstring "yes")
+        runMatrixParser (r4 !^pZip p2 p3 p4) workSheet
+        |> List.ofSeq
+        |> List.head
+        |> function 
+            | ("FOTZO-1",4032,84,7453089535063L),"hello","gogo","yes" -> pass()
+            | _ -> fail()           
   ]    

@@ -31,7 +31,9 @@ module XLStream =
                     ) 
                 xShifts = s.xShifts |> List.mapTail(fun _ -> 0)
             }       
-        else failwith "Not implemented"        
+        else failwith "Not implemented"  
+    let incrXShift (s: XLStream) : XLStream =
+        { s with xShifts = s.xShifts |> List.mapTail((+) 1)}          
     let applyXShift (s: XLStream) : XLStream =
         { s with 
             userRange = 
@@ -41,7 +43,8 @@ module XLStream =
                     ur.Offset(0,0,ur.Rows,x)
                 ) 
             xShifts = s.xShifts |> List.mapTail(fun _ -> 0)
-        }       
+        } 
+     
     let applyYShift (s: XLStream) : XLStream =
         { s with 
             userRange = 
