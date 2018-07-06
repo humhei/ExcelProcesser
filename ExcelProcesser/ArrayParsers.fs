@@ -4,17 +4,35 @@ open CellParsers
 open System.Linq.Expressions
 
 type Shift= int
-
-type Stream=
+ 
+type XLStream=
     {userRange:seq<ExcelRangeBase>
      xShifts:Shift list}
  
 
-module Stream =
+module XLStream =
+
     let getUserRange s =
         s.userRange
 
-    let applyXShift (s: Stream) : Stream =
+    let applyXShiftOfSubStract (subStream: XLStream) (s:XLStream) : XLStream =
+        if subStream.xShifts.Length = s.xShifts.Length then
+            let subStract = 
+                let xshift = s.xShifts |> Seq.last
+                let subShift = subStream.xShifts |> Seq.last
+                xshift - subShift
+
+            { s with 
+                userRange = 
+                    s.userRange |> Seq.map (fun ur ->
+                        let l = s.xShifts.Length
+                        let x = s.xShifts.[l - 1] + 1
+                        ur.Offset(0,subStract,ur.Rows,x-subStract)
+                    ) 
+                xShifts = s.xShifts |> List.mapTail(fun _ -> 0)
+            }       
+        else failwith "Not implemented"        
+    let applyXShift (s: XLStream) : XLStream =
         { s with 
             userRange = 
                 s.userRange |> Seq.map (fun ur ->
@@ -24,7 +42,7 @@ module Stream =
                 ) 
             xShifts = s.xShifts |> List.mapTail(fun _ -> 0)
         }       
-    let applyYShift (s: Stream) : Stream =
+    let applyYShift (s: XLStream) : XLStream =
         { s with 
             userRange = 
                 s.userRange |> Seq.map (fun ur ->
@@ -35,21 +53,21 @@ module Stream =
                 |> List.ofSeq
         }               
 
-type ArrayParser=Stream->Stream
+type ArrayParser=XLStream->XLStream
 
 module ArrayParser=
 
     let xPlaceholder n:ArrayParser=
-        fun (stream:Stream)->
+        fun (stream:XLStream)->
             let shift=stream.xShifts|>List.mapTail(fun c->c+n-1)
             {stream with xShifts=shift}
     let yPlaceholder n:ArrayParser=
-        fun (stream:Stream)->
+        fun (stream:XLStream)->
             let t=Array.zeroCreate (n-1)|>List.ofArray
             let shift=stream.xShifts @  t
             {stream with xShifts=shift }    
     let (!@) (p:CellParser):ArrayParser=
-        fun (stream:Stream)->
+        fun (stream:XLStream)->
             let y=stream.xShifts.Length - 1
             let x=stream.xShifts |> Seq.last
             stream.userRange
@@ -57,6 +75,7 @@ module ArrayParser=
                 let cell = c.Offset(y,x,1,1)
                 p cell
             )
+            |> List.ofSeq
             |>fun c->
                 { stream with 
                     userRange=c }   
@@ -64,36 +83,38 @@ module ArrayParser=
 
 
     let (+>>) (p1:ArrayParser) (p2:ArrayParser):ArrayParser=
-        let p2=fun (stream:Stream)->
+        let p2=fun (stream:XLStream)->
             let shift=stream.xShifts|>List.mapTail(fun c->c+1)
             p2  {stream with xShifts=shift;}
         p1>>p2
 
     let (>>+) (p1:ArrayParser) (p2:ArrayParser):ArrayParser=
-        let p2=fun (stream:Stream)->
+        let p2=fun (stream:XLStream)->
+            let offset = stream.xShifts|>List.last|>(+) 1
             p2  {stream with 
                     xShifts = stream.xShifts|>List.mapTail(fun _->0)
-                    userRange = stream.userRange |> Seq.map (fun u -> u.Offset (0,1))}
+                    userRange = stream.userRange |> Seq.map (fun u -> u.Offset (0,offset))}
         p1 >> p2     
 
     let (+>>+) (p1:ArrayParser) (p2:ArrayParser):ArrayParser=
-        p1+>>p2>>Stream.applyXShift
+        p1+>>p2>>XLStream.applyXShift
+
         
     let (^+>>) (p1:ArrayParser) (p2:ArrayParser):ArrayParser=
-        let p2=fun (stream:Stream)->
+        let p2=fun (stream:XLStream)->
             let shift= stream.xShifts @ [0]
             p2  {stream with 
                     xShifts=shift}
         p1>>p2
 
     let (^>>+) (p1:ArrayParser) (p2:ArrayParser):ArrayParser=
-        let p2=fun (stream:Stream)->
+        let p2=fun (stream:XLStream)->
             let newS = 
                 p2  
                     {stream with 
                         xShifts=[0]
                         userRange = stream.userRange |> Seq.map (fun u -> 
-                            let offsetted = u.Offset (1,0)
+                            let offsetted = u.Offset (stream.xShifts.Length,0)
                             offsetted
                         ) 
                     }
@@ -102,7 +123,7 @@ module ArrayParser=
 
     let (^+>>+) (p1:ArrayParser) (p2:ArrayParser):ArrayParser=      
         p1 ^+>> p2 
-        >> Stream.applyYShift
+        >> XLStream.applyYShift
 
     let xlMany (p:ArrayParser) :ArrayParser =
         fun stream ->
@@ -131,7 +152,7 @@ module ArrayParser=
 
 
                     yield! loop s
-                } |> Seq.map Stream.applyXShift |> List.ofSeq
+                } |> Seq.map XLStream.applyXShift |> List.ofSeq
             { s with 
                 userRange =
                     r |> Seq.collect (fun c ->
@@ -167,8 +188,8 @@ module ArrayParser=
 
 
                     yield! loop s
-                } 
-            let r = r |> Seq.map Stream.applyYShift |> List.ofSeq    
+                } |> List.ofSeq
+            let r = r |> Seq.map XLStream.applyYShift |> List.ofSeq    
 
             { s with 
                 userRange =

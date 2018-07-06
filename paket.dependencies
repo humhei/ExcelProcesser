@@ -5,3 +5,5 @@ nuget Expecto
 nuget EPPlus
 nuget FParsec
 nuget FSharp.Core 4.3.4
+nuget Fake
+nuget Fake.IO.FileSystem

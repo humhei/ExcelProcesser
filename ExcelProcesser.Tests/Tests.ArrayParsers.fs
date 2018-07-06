@@ -1,14 +1,15 @@
-module Tests.MyTests
+module Tests.ArrayParsers
 open ExcelProcess
 open CellParsers
 open Expecto
 open System.Drawing
 open ArrayParser
 open FParsec
+open Tests.Types
 let pass() = Expect.isTrue true "passed"
 let fail() = Expect.isTrue false "failed"
-let workSheet = __SOURCE_DIRECTORY__ + @"\test.xlsx" |> Excel.getWorksheetByIndex 0
-let MyTests =
+let workSheet = XLPath.test |> Excel.getWorksheetByIndex 0
+let ArrayParserTests =
   testList "ParserTests" [
     testCase "Parse cell Test" <| fun _ -> 
         let parser:ArrayParser=
@@ -115,7 +116,7 @@ let MyTests =
                     
         let addresses = workSheet
                        |> ArrayParser.run parser
-                       |> Stream.getUserRange
+                       |> XLStream.getUserRange
                        |> Seq.map (fun r -> r.Address)
                        |> List.ofSeq
 
@@ -132,7 +133,7 @@ let MyTests =
 
         let addresses = workSheet
                        |> ArrayParser.run parser
-                       |> Stream.getUserRange
+                       |> XLStream.getUserRange
                        |> Seq.map (fun r -> r.Address)
                        |> List.ofSeq
                        
@@ -186,5 +187,25 @@ let MyTests =
 
         match reply with
           |["A2:A4";"B6:B7"]->pass()
+          |_->fail() 
+
+    testCase "row many operator complex" <| fun _ -> 
+        let parser:ArrayParser=
+            let p =
+                many1 (pchar ' ') |> sepEndBy1 pint32
+            let parser = !@pFParsec(p) |> rowMany
+            parser
+                   
+        let reply=
+            workSheet
+            |> ArrayParser.run parser
+            |>fun c->c.userRange
+            |>Seq.map(fun c->c.Address)
+            |>List.ofSeq
+            |>List.filter (fun ad ->
+                ad.Contains ":"
+            )
+        match reply with
+          |["F2:F4";"F11:F13"]->pass()
           |_->fail() 
   ]

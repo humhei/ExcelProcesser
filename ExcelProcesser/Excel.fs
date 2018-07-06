@@ -24,6 +24,13 @@ module Excel=
         let file = FileInfo(filename) 
         let xlPackage = new ExcelPackage(file)
         xlPackage.Workbook.Worksheets.[index]
+    let getWorksheetByName (name:string) filename = 
+        let file = FileInfo(filename) 
+        let xlPackage = new ExcelPackage(file)
+        xlPackage.Workbook.Worksheets |> Seq.find (fun ws ->
+            ws.Name = name
+        )
+
     let getMaxColNumber (worksheet:ExcelWorksheet) = 
         worksheet.Dimension.End.Column
     let getMaxRowNumber (worksheet:ExcelWorksheet) = 
@@ -98,6 +105,6 @@ module Excel=
             |> List.sortBy (fun s ->
                 let cell = s |> Seq.head
                 let c00,r00 = parseCellAddress cell.Address
-                c00,r00
+                r00,c00
             )
         r        

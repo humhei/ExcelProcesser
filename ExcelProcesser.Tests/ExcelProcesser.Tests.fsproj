@@ -6,7 +6,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Tests.MyTests.fs" />
+    <None Include="resources\matrixTest.xlsx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="resources\test.xlsx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <Compile Include="Tests.Types.fs" />
+    <Compile Include="Tests.ArrayParsers.fs" />
+    <Compile Include="Tests.MatrixParsers.fs" />
     <Compile Include="Tests.Runner.fs" />
   </ItemGroup>
 

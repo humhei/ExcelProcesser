@@ -1,4 +1,5 @@
 namespace ExcelProcess
+
 module CellParsers=
     open FParsec
     open System.Drawing
@@ -37,6 +38,13 @@ module CellParsers=
             let text = cell.Text
             match run p text with 
             | ParserResult.Success _ -> true
+            | _ -> false
+
+    let pFParsecWith (p: Parser<_,_>) f =
+        fun (cell:ExcelRangeBase) ->
+            let text = cell.Text
+            match run p text with 
+            | ParserResult.Success (r,_,_) -> f r
             | _ -> false
 
     let pAny :CellParser=fun _->true

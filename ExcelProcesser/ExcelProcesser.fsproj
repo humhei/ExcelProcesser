@@ -1,15 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFrameworks>net462;netstandard2.0</TargetFrameworks>
-    <Version>0.2.0-RC2</Version>
   </PropertyGroup>
-
   <ItemGroup>
     <Compile Include="Linq.fs" />
     <Compile Include="Excel.fs" />
     <Compile Include="CellParsers.fs" />
     <Compile Include="ArrayParsers.fs" />
+    <Compile Include="MatrixParsers.fs" />
   </ItemGroup>
   <Import Project="..\.paket\Paket.Restore.targets" />
 </Project>

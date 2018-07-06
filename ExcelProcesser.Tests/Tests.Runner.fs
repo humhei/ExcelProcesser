@@ -2,9 +2,9 @@
 module Runner
 open Expecto
 open Expecto.Logging
-open Tests.MyTests
+open Tests.ArrayParsers
 open ExcelProcess
-
+open Tests.MatrixParsers 
 let testConfig =  
     { defaultConfig with 
          parallelWorkers = 1
@@ -12,7 +12,8 @@ let testConfig =
 
 let tests = 
     testList "All tests" [  
-        MyTests
+        ArrayParserTests
+        MatrixParserTests
     ]
 
 [<EntryPoint>]
