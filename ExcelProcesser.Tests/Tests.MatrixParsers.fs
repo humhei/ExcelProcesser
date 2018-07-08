@@ -153,6 +153,7 @@ let MatrixParserTests =
             | 
                 [
                     ("FOTZO-1",4032,84,7453089535063L),()
+                    ("KOLA-1",4032,84,7453089535070L),()
                 ] -> pass()
             | _ -> fail()  
 
@@ -166,20 +167,21 @@ let MatrixParserTests =
             | 
                 [
                     "hello",()
+                    "yes",()
                 ] -> pass()
-            | _ -> fail()       
-    ftestCase "Parse with mxMany operator" <| fun _ ->
+            | _ -> fail() 
+                  
+    testCase "Parse with mxMany operator" <| fun _ ->
         let p = 
             ["hello";"gogo";"yes"] |> List.map pstring |> choice |> (!^)
         let parser = !^pZip <==> (mxMany p)
-        let t = runMatrixParser parser workSheet
-        printf ""
-        // runMatrixParser parser workSheet
-        // |> List.ofSeq
-        // |> function 
-        //     | 
-        //         [
-        //             ("FOTZO-1",4032,84,7453089535063L),()
-        //         ] -> pass()
-        //     | _ -> fail()          
+        runMatrixParser parser workSheet
+        |> List.ofSeq
+        |> function 
+            | 
+                [
+                    ("FOTZO-1",4032,84,7453089535063L),["hello";"gogo";"yes"]
+                    ("KOLA-1",4032,84,7453089535070L),["yes"]
+                ] -> pass()
+            | _ -> fail()          
   ]    

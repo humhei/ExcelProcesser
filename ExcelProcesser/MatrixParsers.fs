@@ -38,7 +38,28 @@ module MatrixStream =
     let filter f ms =
         ms |> shuffle (fun zips ->
             zips |> Seq.filter f
-        )              
+        )      
+        
+    let filterOfMatrixStream f ms1 ms2 =
+        ms2 |> filter (fun (_,cell1) ->
+            ms1.XLStream.userRange 
+            |> Seq.exists (Excel.contain cell1)
+            |> f
+        )
+    let sortBy (mses: list<MatrixStream<_>>) =
+        mses |> List.sortBy (fun ms ->
+            let cell = ms.XLStream.userRange |> Seq.exactlyOne |> Seq.head
+            let c00,r00 = Excel.parseCellAddress cell.Address
+            r00,c00
+        )        
+    let distinctRange (mses: list<MatrixStream<_>>) =
+        mses |> sortBy |> List.map (fun ms ->
+            let ranges = ms.XLStream.userRange |> Excel.distinctRanges
+            filter (fun (_,cell) ->
+                ranges |> List.exists (fun range -> range.Address = cell.Address)
+            ) ms
+        )  
+
 
 type MatrixParser<'state> = XLStream -> MatrixStream<'state>
 module MatrixParsers =
@@ -55,13 +76,13 @@ module MatrixParsers =
             | ParserResult.Failure _ -> failwithf "failed parse %A" s   
 
     let  (!!) (p: ArrayParser) = 
-        fun ms ->
-            { XLStream = p ms.XLStream; State = ms.State |> Seq.map ignore }    
+        fun xlStream ->
+            { XLStream = p xlStream; State = xlStream.userRange |> Seq.map ignore }    
                                
-    let  (!^^) (p:Parser<'a,unit>) f : MatrixParser<_,'a> = 
+    let  (!^^) (p:Parser<'a,unit>) f : MatrixParser<'a> = 
         let ap = !@(pFParsecWith p f)
-        fun mp ->
-            let newXLS = ap mp.XLStream
+        fun xlStream ->
+            let newXLS = ap xlStream
             let xshift = newXLS.xShifts |> List.last
             let l = newXLS.xShifts.Length - 1
             {
@@ -70,12 +91,12 @@ module MatrixParsers =
                     |> Seq.map (fun cell -> cell.Offset(l,xshift))
                     |> Seq.map(fun cell -> runWithResultBack p cell.Text)                
             }
-    let  (!^) (p:Parser<'a,unit>) : MatrixParser<_,'a> = 
+    let  (!^) (p:Parser<'a,unit>) : MatrixParser<'a> = 
         (!^^) p (fun _ -> true)
-    let private xlpipe2 (x : MatrixParser<_,'a>) (y: MatrixParser<_,'b>) (f: 'a -> 'b ->'c) =
-        fun ms ->
-            let s1 = x ms |> MatrixStream.incrXShift
-            let s2 = y s1
+    let private xlpipe2 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (f: 'a -> 'b ->'c) =
+        fun xlStream ->
+            let s1 = x xlStream |> MatrixStream.incrXShift
+            let s2 = y s1.XLStream
             let left = 
                 s1 |> MatrixStream.filter (fun (_,cell1) ->
                     s2.XLStream.userRange 
@@ -92,10 +113,10 @@ module MatrixParsers =
 
 
 
-    let (<==>) (x : MatrixParser<_,'a>) (y: MatrixParser<_,'b>) : MatrixParser<_,'a * 'b> =
+    let (<==>) (x : MatrixParser<'a>) (y: MatrixParser<'b>) : MatrixParser<'a * 'b> =
         xlpipe2 x y (fun a b -> a,b)
     let c2 = (<==>)    
-    let private xlpipe3 (x : MatrixParser<_,'a>) (y: MatrixParser<_,'b>) (z: MatrixParser<_,'c>) (f: 'a -> 'b ->'c -> 'd) =
+    let private xlpipe3 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser<'c>) (f: 'a -> 'b ->'c -> 'd) =
         xlpipe2 (x <==> y) z (fun (a,b) c ->
             f a b c
         )
@@ -104,7 +125,7 @@ module MatrixParsers =
             xlpipe3 x y z (fun a b c ->
                 a,b,c
             )   
-    let private xlpipe4 (x : MatrixParser<_,'a>) (y: MatrixParser<_,'b>) (z: MatrixParser<_,'c>) (m: MatrixParser<_,'d>) (f: 'a -> 'b ->'c -> 'd -> 'e) =
+    let private xlpipe4 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser<'c>) (m: MatrixParser<'d>) (f: 'a -> 'b ->'c -> 'd -> 'e) =
         xlpipe2 (c3 x y z) m (fun (a,b,c) d ->
             f a b c d
         )
@@ -113,39 +134,62 @@ module MatrixParsers =
             xlpipe4 x y z m (fun a b c d->
                 a,b,c,d
             )     
-    let mxMany (p:MatrixParser<'a,'b>) =
+    let mxMany (p:MatrixParser<'a>) =
                 
-        fun (stream:MatrixStream<'a>) ->
-            let s = p stream
-            let r =
+        fun (stream:XLStream) ->
+            let singleton s = 
+                { State = s.State |> Seq.map List.singleton 
+                  XLStream = s.XLStream }
+            let s = p stream |> singleton
+            let mses =
                 seq {
-                    let rec loop (s2:MatrixStream<'b>) =
-                        let s = 
-                            s |> MatrixStream.filter (fun (_,cell1) ->
-                                s2.XLStream.userRange 
-                                |> Seq.exists (Excel.contain cell1)  
-                            )            
-                        let newS = s |> MatrixStream.incrXShift |> paccum
-                        let lifted = newS
+                    let rec loop (ms:MatrixStream<'a list>) =
+                        let fold (ms1:MatrixStream<'a>) (ms2:MatrixStream<'a list>) =
+                            let filteredMS = MatrixStream.filterOfMatrixStream id ms1 ms2
+                            { filteredMS with 
+                                XLStream = { filteredMS.XLStream with xShifts = ms1.XLStream.xShifts }
+                                State = 
+                                    Seq.map2 (fun list a -> 
+                                        list @ [a]) filteredMS.State ms1.State
+                            }
+                        let newS = fold (ms.XLStream |> XLStream.incrXShift |> p) ms
+                        let lifted = 
+                            let filteredMS = MatrixStream.filterOfMatrixStream not newS ms
+                            if Seq.isEmpty filteredMS.XLStream.userRange then 
+                                []
+                            else [filteredMS]                                                        
                         seq {                   
-                            yield lifted
+                            yield! lifted
                             if Seq.isEmpty newS.XLStream.userRange then 
                                 yield! []
                             else 
-                                yield! loop newS   
+                                yield! loop newS  
                         }
-
-
                     yield! loop s
-                } |> List.ofSeq
-            printf ""            
-            s          
+                } |> List.ofSeq |> MatrixStream.distinctRange 
+            {
+                State = mses |> Seq.collect (fun ms ->
+                    ms.State
+                )
+                XLStream = 
+                    {
+                        xShifts = 
+                            let shift = 
+                                mses |> Seq.map (fun ms ->
+                                    ms.XLStream.xShifts |> Seq.last 
+                                ) |> Seq.max
+                            s.XLStream.xShifts |> List.mapTail(fun _ -> shift)     
+                        userRange = 
+                            let ranges = mses |> Seq.collect (fun ms -> ms.XLStream.userRange) 
+                            ranges                                              
+                    }
+            }        
                 
 
-    let private rPipe2 (x : MatrixParser<_,'a>) (y: MatrixParser<_,'b>) (f: 'a -> 'b ->'c) =
+    let private rPipe2 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (f: 'a -> 'b ->'c) =
         fun ms ->
             let s1 = x ms |> MatrixStream.incrYShift
-            let s2 = y s1
+            let s2 = y s1.XLStream
             let left = 
                 s1 |> MatrixStream.filter (fun (_,cell1) ->
                     s2.XLStream.userRange 
@@ -160,22 +204,21 @@ module MatrixParsers =
                     f ls rs
                 )
             }   
-    let (^<==>) (x : MatrixParser<_,'a>) (y: MatrixParser<_,'b>) : MatrixParser<_,'a * 'b> =
+    let (^<==>) (x : MatrixParser<'a>) (y: MatrixParser<'b>) : MatrixParser<'a * 'b> =
         rPipe2 x y (fun a b -> a,b)  
     let r2 = (^<==>)   
-    let private rPipe3 (x : MatrixParser<_,'a>) (y: MatrixParser<_,'b>) (z: MatrixParser<_,'c>) (f: 'a -> 'b ->'c -> 'd) =
+    let private rPipe3 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser<'c>) (f: 'a -> 'b ->'c -> 'd) =
         rPipe2 (x ^<==> y) z (fun (a,b) c ->
             f a b c
         )
-    let r3 (x : MatrixParser<_,'a>) (y: MatrixParser<_,'b>) (z: MatrixParser<_,'c>) =
+    let r3 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser<'c>) =
         rPipe3 x y z (fun a b c -> a,b,c)     
 
-    let runMatrixParser (p: MatrixParser<_,_>) (worksheet:ExcelWorksheet) =
+    let runMatrixParser (p: MatrixParser<_>) (worksheet:ExcelWorksheet) =
         let stream = 
             worksheet
             |>Excel.getUserRange
             |>Seq.cache
             |>fun c->{userRange=c;xShifts=[0]}
-            |>MatrixStream.ofXLStream
         p stream
         |> fun mp -> mp.State

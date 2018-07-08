@@ -55,7 +55,7 @@ module Excel=
 
     let translate address (xOffset:int) (yOffset:int) =
         ExcelCellBase.TranslateFromR1C1(ExcelCellBase.TranslateToR1C1(address, -yOffset, -xOffset), 0, 0)
-    let private parseCellAddress s =
+    let parseCellAddress s =
         let p = (asciiUpper .>>. pint64) 
         run p s 
         |> function
@@ -93,6 +93,13 @@ module Excel=
             add1 = add2       
         else 
             false
+    let sortBy (ranges: seq<ExcelRangeBase>) =
+        ranges
+        |> Seq.sortBy (fun s ->
+            let cell = s |> Seq.head
+            let c00,r00 = parseCellAddress cell.Address
+            r00,c00
+        )
 
     let distinctRanges (ranges: seq<ExcelRangeBase>) =
         let r = 
@@ -103,10 +110,6 @@ module Excel=
                 else 
                     accum @ [range]     
             ) []
+            |> sortBy
             |> List.ofSeq
-            |> List.sortBy (fun s ->
-                let cell = s |> Seq.head
-                let c00,r00 = parseCellAddress cell.Address
-                r00,c00
-            )
         r        

@@ -138,16 +138,18 @@ module ArrayParser=
                     let rec loop s =
                         let newS = s |> XLStream.applyXShift |> p
                         let lifted =
-                            { s with
-                                userRange =  
-                                let sAdds =  s.userRange |> Seq.map (fun c -> c.Address)
-                                let newAdds =  newS.userRange |> Seq.map (fun c -> c.Address)
-                                Seq.except newAdds sAdds |> Seq.map (fun add ->
-                                    s.userRange |> Seq.find (fun c -> c.Address = add)
-                                )
-                            }        
+                            let filterS =
+                                { s with
+                                    userRange =  
+                                        let sAdds =  s.userRange |> Seq.map (fun c -> c.Address)
+                                        let newAdds =  newS.userRange |> Seq.map (fun c -> c.Address)
+                                        Seq.except newAdds sAdds |> Seq.map (fun add ->
+                                            s.userRange |> Seq.find (fun c -> c.Address = add)
+                                        )
+                                }        
+                            if Seq.isEmpty filterS.userRange then [] else [filterS]                          
                         seq {                   
-                            yield lifted
+                            yield! lifted
                             if Seq.isEmpty newS.userRange then 
                                 yield! []
                             else 
