@@ -183,5 +183,15 @@ let MatrixParserTests =
                     ("FOTZO-1",4032,84,7453089535063L),["hello";"gogo";"yes"]
                     ("KOLA-1",4032,84,7453089535070L),["yes"]
                 ] -> pass()
-            | _ -> fail()          
+            | _ -> fail()       
+    testCase "Parse with mxRowMany operator" <| fun _ ->
+        let parser = pSize ^<==> mxRowMany pFraction
+        runMatrixParser parser workSheet
+        |> List.ofSeq
+        |> List.head
+        |> function 
+            | 
+                [35;36;37;38;39;40],[[1;2;3;3;2;1];[2;2;3;3;2;1];[1;2;3;3;2;1];[1;2;3;3;2;1]]
+                -> pass()
+            | _ -> fail()            
   ]    

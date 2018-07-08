@@ -144,7 +144,7 @@ module MatrixParsers =
             let mses =
                 seq {
                     let rec loop (ms:MatrixStream<'a list>) =
-                        let fold (ms1:MatrixStream<'a>) (ms2:MatrixStream<'a list>) =
+                        let collect (ms1:MatrixStream<'a>) (ms2:MatrixStream<'a list>) =
                             let filteredMS = MatrixStream.filterOfMatrixStream id ms1 ms2
                             { filteredMS with 
                                 XLStream = { filteredMS.XLStream with xShifts = ms1.XLStream.xShifts }
@@ -152,7 +152,7 @@ module MatrixParsers =
                                     Seq.map2 (fun list a -> 
                                         list @ [a]) filteredMS.State ms1.State
                             }
-                        let newS = fold (ms.XLStream |> XLStream.incrXShift |> p) ms
+                        let newS = collect (ms.XLStream |> XLStream.incrXShift |> p) ms
                         let lifted = 
                             let filteredMS = MatrixStream.filterOfMatrixStream not newS ms
                             if Seq.isEmpty filteredMS.XLStream.userRange then 
@@ -213,6 +213,56 @@ module MatrixParsers =
         )
     let r3 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser<'c>) =
         rPipe3 x y z (fun a b c -> a,b,c)     
+    let mxRowMany (p:MatrixParser<'a>) =
+                
+        fun (stream:XLStream) ->
+            let singleton s = 
+                { State = s.State |> Seq.map List.singleton 
+                  XLStream = s.XLStream }
+            let s = p stream |> singleton
+            let mses =
+                seq {
+                    let rec loop (ms:MatrixStream<'a list>) =
+                        let fold (ms1:MatrixStream<'a>) (ms2:MatrixStream<'a list>) =
+                            let filteredMS = MatrixStream.filterOfMatrixStream id ms1 ms2
+                            { filteredMS with 
+                                XLStream = { filteredMS.XLStream with xShifts = ms1.XLStream.xShifts }
+                                State = 
+                                    Seq.map2 (fun list a -> 
+                                        list @ [a]) filteredMS.State ms1.State
+                            }
+                        let newS = fold (ms.XLStream |> XLStream.incrYShift |> p) ms
+                        let lifted = 
+                            let filteredMS = MatrixStream.filterOfMatrixStream not newS ms
+                            if Seq.isEmpty filteredMS.XLStream.userRange then 
+                                []
+                            else [filteredMS]                                                        
+                        seq {                   
+                            yield! lifted
+                            if Seq.isEmpty newS.XLStream.userRange then 
+                                yield! []
+                            else 
+                                yield! loop newS  
+                        }
+                    yield! loop s
+                } |> List.ofSeq |> MatrixStream.distinctRange 
+            {
+                State = mses |> Seq.collect (fun ms ->
+                    ms.State
+                )
+                XLStream = 
+                    {
+                        xShifts = 
+                            let shift = 
+                                mses |> Seq.map (fun ms ->
+                                    ms.XLStream.xShifts 
+                                ) |> Seq.maxBy Seq.length
+                            shift  
+                        userRange = 
+                            let ranges = mses |> Seq.collect (fun ms -> ms.XLStream.userRange) 
+                            ranges                                              
+                    }
+            } 
 
     let runMatrixParser (p: MatrixParser<_>) (worksheet:ExcelWorksheet) =
         let stream = 
