@@ -15,25 +15,27 @@ module XLStream =
     let getUserRange s =
         s.userRange
 
-    let applyXShiftOfSubStract (subStream: XLStream) (s:XLStream) : XLStream =
-        if subStream.xShifts.Length = s.xShifts.Length then
-            let subStract = 
-                let xshift = s.xShifts |> Seq.last
-                let subShift = subStream.xShifts |> Seq.last
-                xshift - subShift
+    // let applyXShiftOfSubStract (subStream: XLStream) (s:XLStream) : XLStream =
+    //     if subStream.xShifts.Length = s.xShifts.Length then
+    //         let subStract = 
+    //             let xshift = s.xShifts |> Seq.last
+    //             let subShift = subStream.xShifts |> Seq.last
+    //             xshift - subShift
 
-            { s with 
-                userRange = 
-                    s.userRange |> Seq.map (fun ur ->
-                        let l = s.xShifts.Length
-                        let x = s.xShifts.[l - 1] + 1
-                        ur.Offset(0,subStract,ur.Rows,x-subStract)
-                    ) 
-                xShifts = s.xShifts |> List.mapTail(fun _ -> 0)
-            }       
-        else failwith "Not implemented"  
+    //         { s with 
+    //             userRange = 
+    //                 s.userRange |> Seq.map (fun ur ->
+    //                     let l = s.xShifts.Length
+    //                     let x = s.xShifts.[l - 1] + 1
+    //                     ur.Offset(0,subStract,ur.Rows,x-subStract)
+    //                 ) 
+    //             xShifts = s.xShifts |> List.mapTail(fun _ -> 0)
+    //         }       
+    //     else failwith "Not implemented"  
     let incrXShift (s: XLStream) : XLStream =
-        { s with xShifts = s.xShifts |> List.mapTail((+) 1)}          
+        { s with xShifts = s.xShifts |> List.mapTail((+) 1)}      
+    let incrYShift (s: XLStream) : XLStream =
+        { s with xShifts = s.xShifts @ [0] }      
     let applyXShift (s: XLStream) : XLStream =
         { s with 
             userRange = 
@@ -134,8 +136,7 @@ module ArrayParser=
             let r =
                 seq {
                     let rec loop s =
-                        let shift = s.xShifts |> List.mapTail (fun c-> c+1)
-                        let newS = {s with xShifts = shift} |> p
+                        let newS = s |> XLStream.applyXShift |> p
                         let lifted =
                             { s with
                                 userRange =  
@@ -171,7 +172,7 @@ module ArrayParser=
                 seq {
                     let rec loop s =
                         let shift = s.xShifts @ [0]
-                        let newS = {s with xShifts = shift;} |> p
+                        let newS = {s with xShifts = shift} |> p
                         let lifted =
                             { s with
                                 userRange =  

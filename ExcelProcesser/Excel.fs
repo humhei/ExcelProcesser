@@ -89,6 +89,8 @@ module Excel=
             && c01 |> inMiddle c10 c11
             && r00 |> inMiddle r10 r11
             && r01 |> inMiddle r10 r11
+        elif Address.isCell add1 && Address.isCell add2 then 
+            add1 = add2       
         else 
             false
 
