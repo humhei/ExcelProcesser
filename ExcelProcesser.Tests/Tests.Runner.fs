@@ -12,7 +12,7 @@ let testConfig =
 
 let tests = 
     testList "All tests" [  
-        // ArrayParserTests
+        ArrayParserTests
         MatrixParserTests
     ]
 

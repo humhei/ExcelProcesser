@@ -136,7 +136,7 @@ module ArrayParser=
             let r =
                 seq {
                     let rec loop s =
-                        let newS = s |> XLStream.applyXShift |> p
+                        let newS = s |> XLStream.incrXShift |> p
                         let lifted =
                             let filterS =
                                 { s with
