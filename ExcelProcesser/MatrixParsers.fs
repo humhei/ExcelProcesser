@@ -45,20 +45,47 @@ module MatrixStream =
             ms1.XLStream.userRange 
             |> Seq.exists (Excel.contain cell1)
             |> f
-        )
-    let sortBy (mses: list<MatrixStream<_>>) =
-        mses |> List.sortBy (fun ms ->
-            let cell = ms.XLStream.userRange |> Seq.exactlyOne |> Seq.head
-            let c00,r00 = Excel.parseCellAddress cell.Address
-            r00,c00
-        )        
-    let distinctRange (mses: list<MatrixStream<_>>) =
-        mses |> sortBy |> List.map (fun ms ->
-            let ranges = ms.XLStream.userRange |> Excel.distinctRanges
-            filter (fun (_,cell) ->
-                ranges |> List.exists (fun range -> range.Address = cell.Address)
-            ) ms
-        )  
+        )     
+    let sort ms = 
+        let states,ranges =
+            Seq.zip  ms.State ms.XLStream.userRange 
+            |> Seq.sortBy (fun (_,s) ->
+                let cell = s |> Seq.head
+                let c00,r00 = Excel.parseCellAddress cell.Address
+                r00,c00
+            ) 
+            |> List.ofSeq 
+            |> List.unzip     
+        { ms with 
+            State = states
+            XLStream = {ms.XLStream with userRange = ranges} }
+    let fold (mses: list<MatrixStream<_>>) =
+        let addes = 
+            mses |> List.collect (fun ms ->
+                let s = ms.XLStream |> XLStream.applyYShift
+                List.ofSeq s.userRange
+            ) |> Excel.distinctRanges |> List.map (fun r -> r.Address)
+        let r = 
+            mses |> List.map ( fun ms ->
+                let l = ms.XLStream.xShifts.Length
+                filter (fun (_,cell) ->
+                    let address = 
+                    
+                        cell.Offset (0,0,l,1) |> fun cell -> cell.Address
+                    List.contains address addes
+                ) ms
+            )
+        let states = r |> Seq.collect (fun ms -> ms.State)  
+        let ranges = r |> Seq.collect (fun ms -> ms.XLStream.userRange)  
+        let shift = r |> Seq.map (fun ms -> ms.XLStream.xShifts) |> Seq.maxBy Seq.length 
+        {
+            State = states
+            XLStream =
+                {
+                    xShifts = shift
+                    userRange = ranges
+                }
+        } |> sort           
 
 
 type MatrixParser<'state> = XLStream -> MatrixStream<'state>
@@ -166,24 +193,9 @@ module MatrixParsers =
                                 yield! loop newS  
                         }
                     yield! loop s
-                } |> List.ofSeq |> MatrixStream.distinctRange 
-            {
-                State = mses |> Seq.collect (fun ms ->
-                    ms.State
-                )
-                XLStream = 
-                    {
-                        xShifts = 
-                            let shift = 
-                                mses |> Seq.map (fun ms ->
-                                    ms.XLStream.xShifts |> Seq.last 
-                                ) |> Seq.max
-                            s.XLStream.xShifts |> List.mapTail(fun _ -> shift)     
-                        userRange = 
-                            let ranges = mses |> Seq.collect (fun ms -> ms.XLStream.userRange) 
-                            ranges                                              
-                    }
-            }        
+                } |> List.ofSeq |> MatrixStream.fold
+            mses             
+     
                 
 
     let private rPipe2 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (f: 'a -> 'b ->'c) =
@@ -214,7 +226,6 @@ module MatrixParsers =
     let r3 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser<'c>) =
         rPipe3 x y z (fun a b c -> a,b,c)     
     let mxRowMany (p:MatrixParser<'a>) =
-                
         fun (stream:XLStream) ->
             let singleton s = 
                 { State = s.State |> Seq.map List.singleton 
@@ -245,24 +256,8 @@ module MatrixParsers =
                                 yield! loop newS  
                         }
                     yield! loop s
-                } |> List.ofSeq |> MatrixStream.distinctRange 
-            {
-                State = mses |> Seq.collect (fun ms ->
-                    ms.State
-                )
-                XLStream = 
-                    {
-                        xShifts = 
-                            let shift = 
-                                mses |> Seq.map (fun ms ->
-                                    ms.XLStream.xShifts 
-                                ) |> Seq.maxBy Seq.length
-                            shift  
-                        userRange = 
-                            let ranges = mses |> Seq.collect (fun ms -> ms.XLStream.userRange) 
-                            ranges                                              
-                    }
-            } 
+                } |> List.ofSeq |> MatrixStream.fold 
+            mses            
 
     let runMatrixParser (p: MatrixParser<_>) (worksheet:ExcelWorksheet) =
         let stream = 

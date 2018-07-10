@@ -13,25 +13,7 @@ type XLStream=
 module XLStream =
 
     let getUserRange s =
-        s.userRange
-
-    // let applyXShiftOfSubStract (subStream: XLStream) (s:XLStream) : XLStream =
-    //     if subStream.xShifts.Length = s.xShifts.Length then
-    //         let subStract = 
-    //             let xshift = s.xShifts |> Seq.last
-    //             let subShift = subStream.xShifts |> Seq.last
-    //             xshift - subShift
-
-    //         { s with 
-    //             userRange = 
-    //                 s.userRange |> Seq.map (fun ur ->
-    //                     let l = s.xShifts.Length
-    //                     let x = s.xShifts.[l - 1] + 1
-    //                     ur.Offset(0,subStract,ur.Rows,x-subStract)
-    //                 ) 
-    //             xShifts = s.xShifts |> List.mapTail(fun _ -> 0)
-    //         }       
-    //     else failwith "Not implemented"  
+        s.userRange 
     let incrXShift (s: XLStream) : XLStream =
         { s with xShifts = s.xShifts |> List.mapTail((+) 1)}      
     let incrYShift (s: XLStream) : XLStream =
@@ -45,7 +27,7 @@ module XLStream =
                     ur.Offset(0,0,ur.Rows,x)
                 ) 
             xShifts = s.xShifts |> List.mapTail(fun _ -> 0)
-        } 
+        }
      
     let applyYShift (s: XLStream) : XLStream =
         { s with 
