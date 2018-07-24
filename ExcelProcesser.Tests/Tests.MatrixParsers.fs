@@ -161,7 +161,7 @@ let MatrixParserTests =
         let parser = 
             c2 
                 (!^ (pstring "Begin"))
-                (mxUntil (fun _ -> true) (pstring "XUntil"))
+                (mxUntil (fun _ -> true) !^ (pstring "XUntil"))
         runMatrixParser parser workSheet
         |> List.ofSeq
         |> function 
@@ -210,10 +210,11 @@ let MatrixParserTests =
         let parser = 
             r2 
                 (!^ (pstring "Begin"))
-                (mxRowUntil (fun _ -> true) (pstring "YUntil"))
+                (mxRowUntil (fun _ -> true) !^(pstring "YUntil"))
         runMatrixParser parser workSheet
         |> List.ofSeq
         |> function 
             | [("Begin","YUntil")] -> pass()
-            | _ -> fail()       
+            | _ -> fail()  
+
   ]    

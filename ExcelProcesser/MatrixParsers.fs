@@ -198,27 +198,17 @@ let mxMany (p:MatrixParser<'a>) =
                 yield! loop s
             } |> List.ofSeq |> MatrixStream.fold
         mses             
-let mxUntil (f: int -> bool) (p:Parser<'a,unit>) =
+let mxUntil (f: int -> bool) (p:MatrixParser<'a>) =
     fun stream ->
-        let mp = !! (xUntil (fun _ -> true) (!@(pFParsec p)))
-        let newStream = mp stream
-        if Seq.isEmpty newStream.XLStream.userRange then 
-            {
-                XLStream = newStream.XLStream
-                State = Seq.empty
-            }      
-        else
-            let shift = newStream.XLStream.xShifts |> List.last
-            let states = 
-                newStream.XLStream.userRange |> Seq.map (fun cell ->
-                    let offseted = cell.Offset(0,shift)
-                    runWithResultBack p offseted.Text                
-                )
-            {
-                XLStream = newStream.XLStream
-                State = states
-            }                        
-        
+        let rec greed stream index =
+            let newStream = p stream
+            let xlStream = newStream.XLStream
+            if Seq.isEmpty xlStream.userRange then 
+                if f index then 
+                    greed (XLStream.incrXShift stream) (index + 1)
+                else newStream                
+            else newStream
+        greed stream 1    
 let private rPipe2 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (f: 'a -> 'b ->'c) =
     fun ms ->
         let s1 = x ms |> MatrixStream.incrYShift
@@ -280,26 +270,17 @@ let mxRowMany (p:MatrixParser<'a>) =
             } |> List.ofSeq |> MatrixStream.fold 
         mses      
 
-let mxRowUntil (f: int -> bool) (p:Parser<'a,unit>) =
-    fun stream ->
-        let mp = !! (yUntil (fun _ -> true) (!@(pFParsec p)))
-        let newStream = mp stream
-        if Seq.isEmpty newStream.XLStream.userRange then 
-            {
-                XLStream = newStream.XLStream
-                State = Seq.empty
-            }      
-        else
-            let shift = newStream.XLStream.xShifts.Length
-            let states = 
-                newStream.XLStream.userRange |> Seq.map (fun cell ->
-                    let offseted = cell.Offset(shift-1,0)
-                    runWithResultBack p offseted.Text                
-                )
-            {
-                XLStream = newStream.XLStream
-                State = states
-            }       
+let mxRowUntil (f: int -> bool) (p:MatrixParser<'a>) =
+    fun (stream:XLStream)->
+        let rec greed stream index =
+            let newStream = p stream
+            let xlStream = newStream.XLStream
+            if Seq.isEmpty xlStream.userRange then 
+                if f index then 
+                    greed (XLStream.incrYShift stream) (index + 1)
+                else newStream                
+            else newStream
+        greed stream 1    
 
 let runMatrixParser (p: MatrixParser<_>) (worksheet:ExcelWorksheet) =
     let stream = 

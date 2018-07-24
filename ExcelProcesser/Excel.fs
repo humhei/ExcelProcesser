@@ -21,10 +21,14 @@ module Excel=
             yield xlPackage.Workbook.Worksheets.[i]
         }
     let getWorksheetByIndex (index:int) filename = 
+        if not (File.Exists filename) then 
+            failwithf "file%s is not existed" filename
         let file = FileInfo(filename) 
         let xlPackage = new ExcelPackage(file)
         xlPackage.Workbook.Worksheets.[index]
     let getWorksheetByName (name:string) filename = 
+        if not (File.Exists filename) then 
+            failwithf "file%s is not existed" filename
         let file = FileInfo(filename) 
         let xlPackage = new ExcelPackage(file)
         xlPackage.Workbook.Worksheets |> Seq.find (fun ws ->

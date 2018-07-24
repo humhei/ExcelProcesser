@@ -75,6 +75,7 @@ let ArrayParserTests =
         match shift with
         |[4] ->pass()
         |_->fail()   
+    
 
 
     testCase "Parse in multi rows Test" <| fun _ -> 
@@ -233,5 +234,18 @@ let ArrayParserTests =
        
         match shift with
         | [0;0;0;0;0;0;0] ->pass()
+        |_->fail()   
+
+    testCase "complex yUntil in row Test" <| fun _ -> 
+        let parser:ArrayParser=
+           !@ (pText ((=) "Begin")) +>> !@ (pText ((=) "Hello"))
+           ^+>> yUntil (fun _ -> true) !@ (pText ((=) "Until"))
+       
+        let shift= workSheet
+                       |>runArrayParser parser
+                       |>fun c->c.xShifts
+       
+        match shift with
+        | [1;0;0;0;0;0;0] ->pass()
         |_->fail()   
   ]

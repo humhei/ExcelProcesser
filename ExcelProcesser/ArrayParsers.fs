@@ -56,6 +56,14 @@ let xUntil (f: int -> bool) parser =
             else newStream
         greed stream 1      
 
+      
+
+let yPlaceholder n:ArrayParser=
+    fun (stream:XLStream)->
+        let t=Array.zeroCreate (n-1)|>List.ofArray
+        let shift=stream.xShifts @  t
+        {stream with xShifts=shift }    
+
 let yUntil (f: int -> bool) parser =
     fun (stream:XLStream)->
         let rec greed stream index =
@@ -65,15 +73,8 @@ let yUntil (f: int -> bool) parser =
                     greed (XLStream.incrYShift stream) (index + 1)
                 else newStream                
             else newStream
-        greed stream 1          
-
-let yPlaceholder n:ArrayParser=
-    fun (stream:XLStream)->
-        let t=Array.zeroCreate (n-1)|>List.ofArray
-        let shift=stream.xShifts @  t
-        {stream with xShifts=shift }    
-
-
+        greed stream 1    
+        
 let (!@) (p:CellParser):ArrayParser=
     fun (stream:XLStream)->
         let y=stream.xShifts.Length - 1
