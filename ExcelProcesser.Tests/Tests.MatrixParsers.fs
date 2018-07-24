@@ -3,7 +3,7 @@ open ExcelProcess
 open CellParsers
 open Expecto
 open System.Drawing
-open ArrayParser
+open ArrayParsers
 open FParsec
 open Tests.Types
 open System.IO
@@ -157,6 +157,17 @@ let MatrixParserTests =
                 ] -> pass()
             | _ -> fail()  
 
+    testCase "Parse with mxUntil operator" <| fun _ ->
+        let parser = 
+            c2 
+                (!^ (pstring "Begin"))
+                (mxUntil (fun _ -> true) (pstring "XUntil"))
+        runMatrixParser parser workSheet
+        |> List.ofSeq
+        |> function 
+            | [("Begin","XUntil")] -> pass()
+            | _ -> fail()      
+
     testCase "Parse with rowMany operator" <| fun _ ->
         let p = 
             ["hello";"gogo";"yes"] |> List.map pstring |> choice
@@ -194,4 +205,15 @@ let MatrixParserTests =
                 [35;36;37;38;39;40],[[1;2;3;3;2;1];[2;2;3;3;2;1];[1;2;3;3;2;1];[1;2;3;3;2;1]]
                 -> pass()
             | _ -> fail()    
+
+    testCase "Parse with mxRowUntil operator" <| fun _ ->
+        let parser = 
+            r2 
+                (!^ (pstring "Begin"))
+                (mxRowUntil (fun _ -> true) (pstring "YUntil"))
+        runMatrixParser parser workSheet
+        |> List.ofSeq
+        |> function 
+            | [("Begin","YUntil")] -> pass()
+            | _ -> fail()       
   ]    

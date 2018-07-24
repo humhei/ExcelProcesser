@@ -3,7 +3,7 @@ open ExcelProcess
 open CellParsers
 open Expecto
 open System.Drawing
-open ArrayParser
+open ArrayParsers
 open FParsec
 open Tests.Types
 let pass() = Expect.isTrue true "passed"
@@ -17,7 +17,7 @@ let ArrayParserTests =
             !@pRegex("GD.*")
         let reply=
             workSheet
-            |>ArrayParser.run parser
+            |>runArrayParser parser
             |>fun c->c.userRange
             |>Seq.map(fun c->c.Address)
             |>List.ofSeq
@@ -31,7 +31,7 @@ let ArrayParserTests =
             !@(pRegex("GD.*") <&> pBkColor Color.Yellow)
         let reply=
             workSheet
-            |>ArrayParser.run parser
+            |>runArrayParser parser
             |>fun c->c.userRange
             |>Seq.map(fun c->c.Address)
             |>List.ofSeq
@@ -44,7 +44,7 @@ let ArrayParserTests =
             !@pRegex("GD.*") +>> !@(pFontColor Color.Blue)
         let reply=
             workSheet
-            |>ArrayParser.run parser
+            |>runArrayParser parser
             |>fun c->c.userRange
             |>Seq.map(fun c->c.Address)
             |>List.ofSeq
@@ -58,11 +58,25 @@ let ArrayParserTests =
             //the +>> operator will increase 1, and xShift will increase n
             !@(pAny) +>> !@(pFontColor Color.Blue) +>> xPlaceholder 2
         let shift= workSheet
-                       |>ArrayParser.run parser
+                       |>runArrayParser parser
                        |>fun c->c.xShifts
         match shift with
         |[3] ->pass()
         |_->fail()    
+
+    testCase "xUntil in row Test" <| fun _ -> 
+        let parser:ArrayParser=
+           !@ (pText ((=) "Begin")) +>> xUntil (fun _ -> true) !@ (pText ((=) "Until"))
+       
+        let shift= workSheet
+                       |>runArrayParser parser
+                       |>fun c->c.xShifts
+       
+        match shift with
+        |[4] ->pass()
+        |_->fail()   
+
+
     testCase "Parse in multi rows Test" <| fun _ -> 
          //match cells of which text begins with GD,
          //and to which Second perpendicular of which text begins with GD
@@ -73,7 +87,7 @@ let ArrayParserTests =
                     ]
         let reply=
             workSheet
-            |>ArrayParser.run parser
+            |>runArrayParser parser
             |>fun c->c.userRange
             |>Seq.map(fun c->c.Address)
             |>List.ofSeq
@@ -89,7 +103,7 @@ let ArrayParserTests =
                    !@pRegex("GD.*") +>> xPlaceholder 2
                     ]
         let shift= workSheet
-                       |>ArrayParser.run parser
+                       |>runArrayParser parser
                        |>fun c->c.xShifts
         match shift with
         |[0;0;2] ->pass()
@@ -102,7 +116,7 @@ let ArrayParserTests =
             ^+>> !@pRegex("GD.*") +>> xPlaceholder 2
                     
         let stream = workSheet
-                       |>ArrayParser.run parser
+                       |>runArrayParser parser
         let shift = stream.xShifts               
         match shift with
         |[0;0;2] ->pass()
@@ -115,7 +129,7 @@ let ArrayParserTests =
             ^>>+ !@pRegex("GD.*") +>> xPlaceholder 2
                     
         let addresses = workSheet
-                       |> ArrayParser.run parser
+                       |> runArrayParser parser
                        |> XLStream.getUserRange
                        |> Seq.map (fun r -> r.Address)
                        |> List.ofSeq
@@ -132,7 +146,7 @@ let ArrayParserTests =
             ^+>>+ !@pFParsec(pstring "GD")
 
         let addresses = workSheet
-                       |> ArrayParser.run parser
+                       |> runArrayParser parser
                        |> XLStream.getUserRange
                        |> Seq.map (fun r -> r.Address)
                        |> List.ofSeq
@@ -147,7 +161,7 @@ let ArrayParserTests =
                    
         let reply=
             workSheet
-            |> ArrayParser.run parser
+            |> runArrayParser parser
             |>fun c->c.userRange
             |>Seq.map(fun c->c.Address)
             |>List.ofSeq
@@ -164,7 +178,7 @@ let ArrayParserTests =
                    
         let reply=
             workSheet
-            |> ArrayParser.run parser
+            |> runArrayParser parser
             |>fun c->c.userRange
             |>Seq.map(fun c->c.Address)
             |>List.ofSeq
@@ -180,7 +194,7 @@ let ArrayParserTests =
                    
         let reply=
             workSheet
-            |> ArrayParser.run parser
+            |> runArrayParser parser
             |>fun c->c.userRange
             |>Seq.map(fun c->c.Address)
             |>List.ofSeq
@@ -198,7 +212,7 @@ let ArrayParserTests =
                    
         let reply=
             workSheet
-            |> ArrayParser.run parser
+            |> runArrayParser parser
             |>fun c->c.userRange
             |>Seq.map(fun c->c.Address)
             |>List.ofSeq
@@ -208,4 +222,16 @@ let ArrayParserTests =
         match reply with
           |["F2:F4";"F11:F13"]->pass()
           |_->fail() 
+
+    testCase "yUntil in row Test" <| fun _ -> 
+        let parser:ArrayParser=
+           !@ (pText ((=) "Begin")) ^+>> yUntil (fun _ -> true) !@ (pText ((=) "Until"))
+       
+        let shift= workSheet
+                       |>runArrayParser parser
+                       |>fun c->c.xShifts
+       
+        match shift with
+        | [0;0;0;0;0;0;0] ->pass()
+        |_->fail()   
   ]
