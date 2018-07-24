@@ -81,8 +81,36 @@ Then batch the result as ExcelRange eg. "B18:E18"
         
     match reply with
         |["B18:E18"]->pass()
+        |_->fail()  
+```
+### Parse with xUntil operator
+```
+        let parser:ArrayParser=
+           !@ (pText ((=) "Begin")) +>> xUntil (fun _ -> true) !@ (pText ((=) "Until"))
+       
+        let shift= workSheet
+                       |>runArrayParser parser
+                       |>fun c->c.xShifts
+       
+        match shift with
+        |[4] ->pass()
         |_->fail()   
 ```
+### Parse with yUntil operator
+```
+        let parser:ArrayParser=
+           !@ (pText ((=) "Begin")) ^+>> yUntil (fun _ -> true) !@ (pText ((=) "Until"))
+       
+        let shift= workSheet
+                       |>runArrayParser parser
+                       |>fun c->c.xShifts
+       
+        match shift with
+        | [0;0;0;0;0;0;0] ->pass()
+        |_->fail()   
+```
+## Advanced: Parser with fparsec parsers and with matrix tuple returned
+See [Tests.MatrixParsers.fs](https://github.com/humhei/ExcelProcesser/blob/master/ExcelProcesser.Tests/Tests.MatrixParsers.fs) For Details
 ## Debug Test In VsCode
   * open reposity in VsCode
   * .paket/paket.exe install
