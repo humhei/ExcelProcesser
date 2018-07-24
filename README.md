@@ -89,8 +89,8 @@ Then batch the result as ExcelRange eg. "B18:E18"
         !@ (pText ((=) "Begin")) +>> xUntil (fun _ -> true) !@ (pText ((=) "Until"))
     
     let shift= workSheet
-                    |>runArrayParser parser
-                    |>fun c->c.xShifts
+               |>runArrayParser parser
+               |>fun c->c.xShifts
     
     match shift with
     |[4] ->pass()
@@ -102,8 +102,8 @@ Then batch the result as ExcelRange eg. "B18:E18"
         !@ (pText ((=) "Begin")) ^+>> yUntil (fun _ -> true) !@ (pText ((=) "Until"))
     
     let shift= workSheet
-                    |>runArrayParser parser
-                    |>fun c->c.xShifts
+               |>runArrayParser parser
+               |>fun c->c.xShifts
     
     match shift with
     | [0;0;0;0;0;0;0] ->pass()
