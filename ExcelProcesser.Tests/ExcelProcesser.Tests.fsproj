@@ -1,25 +1,22 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp2.0</TargetFramework>
+    <TargetFramework>net462</TargetFramework>
   </PropertyGroup>
-
   <ItemGroup>
-    <None Include="resources\matrixTest.xlsx">
+    <ProjectReference Include="..\ExcelProcesser\ExcelProcesser.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="resources/matrixTest.xlsx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="resources\test.xlsx">
+    <None Include="resources/test.xlsx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <Compile Include="Tests.Types.fs" />
     <Compile Include="Tests.ArrayParsers.fs" />
     <Compile Include="Tests.MatrixParsers.fs" />
     <Compile Include="Tests.Runner.fs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\ExcelProcesser\ExcelProcesser.fsproj" />
   </ItemGroup>
   <Import Project="..\.paket\Paket.Restore.targets" />
 </Project>

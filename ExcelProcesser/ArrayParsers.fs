@@ -9,7 +9,7 @@ type XLStream=
      xShifts:Shift list}
 
 module XLStream =
-
+    
     let getUserRange s =
         s.userRange 
     let incrXShift (s: XLStream) : XLStream =
@@ -50,9 +50,9 @@ let xUntil (f: int -> bool) parser =
         let rec greed stream index =
             let newStream = parser stream
             if Seq.isEmpty newStream.userRange then 
-                if f index then 
+                if f index then newStream
+                else
                     greed (XLStream.incrXShift stream) (index + 1)
-                else newStream                
             else newStream
         greed stream 1      
 
@@ -69,9 +69,9 @@ let yUntil (f: int -> bool) parser =
         let rec greed stream index =
             let newStream = parser stream
             if Seq.isEmpty newStream.userRange then 
-                if f index then 
+                if f index then newStream 
+                else
                     greed (XLStream.incrYShift stream) (index + 1)
-                else newStream                
             else newStream
         greed stream 1    
         
@@ -82,6 +82,8 @@ let (!@) (p:CellParser):ArrayParser=
         stream.userRange
         |>Seq.where(fun c-> 
             let cell = c.Offset(y,x,1,1)
+            if cell.Text <> ""
+            then printfn "paring %s with %A" cell.Text p
             p cell
         )
         |> List.ofSeq

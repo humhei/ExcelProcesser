@@ -12,6 +12,14 @@ type MatrixStream<'state> =
 
 [<RequireQualifiedAccess>]
 module MatrixStream = 
+    let createEmpty =
+        {
+            XLStream = {
+                userRange = Seq.empty
+                xShifts = []
+            }
+            State = Seq.empty
+        }
     let ofXLStream stream =
         {
             XLStream = stream
@@ -62,32 +70,36 @@ module MatrixStream =
             State = states
             XLStream = {ms.XLStream with userRange = ranges} }
     let fold (mses: list<MatrixStream<_>>) =
-        let addes = 
-            mses |> List.collect (fun ms ->
-                let s = ms.XLStream |> XLStream.applyYShift
-                List.ofSeq s.userRange
-            ) |> Excel.distinctRanges |> List.map (fun r -> r.Address)
-        let r = 
-            mses |> List.map ( fun ms ->
-                let l = ms.XLStream.xShifts.Length
-                filter (fun (_,cell) ->
-                    let address = 
+        match mses with 
+        | h :: t ->
+            let addes = 
+                mses |> List.collect (fun ms ->
+                    let s = ms.XLStream |> XLStream.applyYShift
+                    List.ofSeq s.userRange
+                ) |> Excel.distinctRanges |> List.map (fun r -> r.Address)
+            let r = 
+                mses |> List.map ( fun ms ->
+                    let l = ms.XLStream.xShifts.Length
+                    filter (fun (_,cell) ->
+                        let address = 
                     
-                        cell.Offset (0,0,l,1) |> fun cell -> cell.Address
-                    List.contains address addes
-                ) ms
-            )
-        let states = r |> Seq.collect (fun ms -> ms.State)  
-        let ranges = r |> Seq.collect (fun ms -> ms.XLStream.userRange)  
-        let shift = r |> Seq.map (fun ms -> ms.XLStream.xShifts) |> Seq.maxBy Seq.length 
-        {
-            State = states
-            XLStream =
-                {
-                    xShifts = shift
-                    userRange = ranges
-                }
-        } |> sort           
+                            cell.Offset (0,0,l,1) |> fun cell -> cell.Address
+                        List.contains address addes
+                    ) ms
+                )
+            let states = r |> Seq.collect (fun ms -> ms.State)  
+            let ranges = r |> Seq.collect (fun ms -> ms.XLStream.userRange)  
+            let shift = r |> Seq.map (fun ms -> ms.XLStream.xShifts) |> Seq.maxBy Seq.length 
+            {
+                State = states
+                XLStream =
+                    {
+                        xShifts = shift
+                        userRange = ranges
+                    }
+            } |> sort           
+        | [] -> createEmpty
+
 
 
 type MatrixParser<'state> = XLStream -> MatrixStream<'state>
@@ -142,6 +154,8 @@ let (|||>) (parser: MatrixParser<'state>) f =
             State = newStream.State |> Seq.map f
         }
 
+let (!^=) p = (!^) p |||> ignore
+let (!^^=) p f = (!^^) p f |||> ignore
 
 let (<==>) (x : MatrixParser<'a>) (y: MatrixParser<'b>) : MatrixParser<'a * 'b> =
     xlpipe2 x y (fun a b -> a,b)
@@ -205,10 +219,12 @@ let mxUntil (f: int -> bool) (p:MatrixParser<'a>) =
             let xlStream = newStream.XLStream
             if Seq.isEmpty xlStream.userRange then 
                 if f index then 
+                    newStream  
+                else
                     greed (XLStream.incrXShift stream) (index + 1)
-                else newStream                
             else newStream
         greed stream 1    
+
 let private rPipe2 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (f: 'a -> 'b ->'c) =
     fun ms ->
         let s1 = x ms |> MatrixStream.incrYShift
@@ -276,9 +292,9 @@ let mxRowUntil (f: int -> bool) (p:MatrixParser<'a>) =
             let newStream = p stream
             let xlStream = newStream.XLStream
             if Seq.isEmpty xlStream.userRange then 
-                if f index then 
+                if f index then newStream    
+                else
                     greed (XLStream.incrYShift stream) (index + 1)
-                else newStream                
             else newStream
         greed stream 1    
 
@@ -290,3 +306,14 @@ let runMatrixParser (p: MatrixParser<_>) (worksheet:ExcelWorksheet) =
         |>fun c->{userRange=c;xShifts=[0]}
     p stream
     |> fun mp -> mp.State
+
+let u2 p1 p2 =
+    fun (stream: XLStream) ->
+        let newStream = p1 stream
+        let xlStream = newStream.XLStream
+        if Seq.isEmpty xlStream.userRange then 
+            let newStream2 = p2 stream
+            if Seq.isEmpty newStream2.XLStream.userRange then 
+                newStream
+            else newStream2
+        else newStream
