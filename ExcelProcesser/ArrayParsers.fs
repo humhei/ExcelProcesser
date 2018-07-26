@@ -45,14 +45,14 @@ let xPlaceholder n:ArrayParser=
     fun (stream:XLStream)->
         let shift=stream.xShifts|>List.mapTail(fun c->c+n-1)
         {stream with xShifts=shift}
-let xUntil (f: int -> bool) parser =
+let xUntil (safe: int -> bool) parser =
     fun (stream:XLStream)->
         let rec greed stream index =
             let newStream = parser stream
             if Seq.isEmpty newStream.userRange then 
-                if f index then newStream
+                if safe index then greed (XLStream.incrXShift stream) (index + 1)
                 else
-                    greed (XLStream.incrXShift stream) (index + 1)
+                    newStream
             else newStream
         greed stream 1      
 
@@ -64,14 +64,14 @@ let yPlaceholder n:ArrayParser=
         let shift=stream.xShifts @  t
         {stream with xShifts=shift }    
 
-let yUntil (f: int -> bool) parser =
+let yUntil (safe: int -> bool) parser =
     fun (stream:XLStream)->
         let rec greed stream index =
             let newStream = parser stream
             if Seq.isEmpty newStream.userRange then 
-                if f index then newStream 
+                if safe index then greed (XLStream.incrYShift stream) (index + 1) 
                 else
-                    greed (XLStream.incrYShift stream) (index + 1)
+                    newStream
             else newStream
         greed stream 1    
         

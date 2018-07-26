@@ -212,16 +212,15 @@ let mxMany (p:MatrixParser<'a>) =
                 yield! loop s
             } |> List.ofSeq |> MatrixStream.fold
         mses             
-let mxUntil (f: int -> bool) (p:MatrixParser<'a>) =
+let mxUntil (safe: int -> bool) (p:MatrixParser<'a>) =
     fun stream ->
         let rec greed stream index =
             let newStream = p stream
             let xlStream = newStream.XLStream
             if Seq.isEmpty xlStream.userRange then 
-                if f index then 
-                    newStream  
-                else
-                    greed (XLStream.incrXShift stream) (index + 1)
+                if safe index then greed (XLStream.incrXShift stream) (index + 1)
+                else newStream
+                    
             else newStream
         greed stream 1    
 
@@ -286,15 +285,15 @@ let mxRowMany (p:MatrixParser<'a>) =
             } |> List.ofSeq |> MatrixStream.fold 
         mses      
 
-let mxRowUntil (f: int -> bool) (p:MatrixParser<'a>) =
+let mxRowUntil (safe: int -> bool) (p:MatrixParser<'a>) =
     fun (stream:XLStream)->
         let rec greed stream index =
             let newStream = p stream
             let xlStream = newStream.XLStream
             if Seq.isEmpty xlStream.userRange then 
-                if f index then newStream    
-                else
-                    greed (XLStream.incrYShift stream) (index + 1)
+                if safe index then greed (XLStream.incrYShift stream) (index + 1)   
+                else newStream
+                    
             else newStream
         greed stream 1    
 
