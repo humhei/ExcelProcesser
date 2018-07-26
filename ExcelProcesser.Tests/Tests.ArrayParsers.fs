@@ -67,10 +67,11 @@ let ArrayParserTests =
     testCase "xUntil in row Test" <| fun _ -> 
         let parser:ArrayParser=
            !@ (pText ((=) "Begin")) +>> xUntil (fun _ -> true) !@ (pText ((=) "Until"))
-       
+        let t = workSheet
+                |>runArrayParser parser
         let shift= workSheet
-                       |>runArrayParser parser
-                       |>fun c->c.xShifts
+                   |>runArrayParser parser
+                   |>fun c->c.xShifts
        
         match shift with
         |[4] ->pass()
