@@ -12,6 +12,9 @@ module XLStream =
     
     let getUserRange s =
         s.userRange 
+    let currentXShift s =
+        s.xShifts |> Seq.last
+
     let incrXShift (s: XLStream) : XLStream =
         { s with xShifts = s.xShifts |> List.mapTail((+) 1)}      
     let incrYShift (s: XLStream) : XLStream =
@@ -37,6 +40,14 @@ module XLStream =
                 ) 
                 |> List.ofSeq
         }               
+        
+    let split (s: XLStream) =
+        s.userRange |> Seq.map (fun ur ->
+            {
+                userRange = Seq.singleton ur
+                xShifts = s.xShifts
+            }
+        )
 
 type ArrayParser=XLStream->XLStream
 
@@ -82,9 +93,10 @@ let (!@) (p:CellParser):ArrayParser=
         stream.userRange
         |>Seq.where(fun c-> 
             let cell = c.Offset(y,x,1,1)
-            if cell.Text <> ""
-            then printfn "paring %s with %A" cell.Text p
-            p cell
+            let r = p cell
+            if not r && cell.Text.Trim() <> "" then 
+                printfn "paring %s with %A fail" cell.Text p
+            r
         )
         |> List.ofSeq
         |>fun c->

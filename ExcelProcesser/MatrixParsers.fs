@@ -14,10 +14,11 @@ type MatrixStream<'state> =
 module MatrixStream = 
     let createEmpty =
         {
-            XLStream = {
-                userRange = Seq.empty
-                xShifts = []
-            }
+            XLStream = 
+                {
+                    userRange = Seq.empty
+                    xShifts = []
+                }
             State = Seq.empty
         }
     let ofXLStream stream =
@@ -30,6 +31,9 @@ module MatrixStream =
             ms with 
                 XLStream = XLStream.incrXShift ms.XLStream
         }  
+    let currentXShift ms =
+        ms.XLStream |> XLStream.currentXShift    
+    
     let incrYShift ms =
         {
             ms with 
@@ -114,7 +118,13 @@ let runWithResultBack parser (s:string) =
 let  (!!) (p: ArrayParser) = 
     fun xlStream ->
         { XLStream = p xlStream; State = xlStream.userRange |> Seq.map ignore }    
-                           
+                         
+let mxXPlaceHolder num =
+    !! (xPlaceholder num)
+
+let mxYPlaceHolder num =
+    !! (yPlaceholder num)
+
 let  (!^^) (p:Parser<'a,unit>) f : MatrixParser<'a> = 
     let ap = !@(pFParsecWith p f)
     fun xlStream ->
@@ -127,6 +137,21 @@ let  (!^^) (p:Parser<'a,unit>) f : MatrixParser<'a> =
                 |> Seq.map (fun cell -> cell.Offset(l,xshift))
                 |> Seq.map(fun cell -> runWithResultBack p cell.Text)                
         }
+let mxPText (f: string -> 'a option) =
+    let ap = !@(pText (f >> Option.isSome))
+    fun xlStream ->
+        let newXLS = ap xlStream
+        let xshift = newXLS.xShifts |> List.last
+        let l = newXLS.xShifts.Length - 1
+        {
+            XLStream = newXLS
+            State = newXLS.userRange 
+                |> Seq.map (fun cell -> cell.Offset(l,xshift))
+                |> Seq.map(fun cell -> f cell.Text |> Option.get)                
+        }
+
+let mxOrigin = mxPText (fun s -> Some s)
+
 let  (!^) (p:Parser<'a,unit>) : MatrixParser<'a> = 
     (!^^) p (fun _ -> true)
 let private xlpipe2 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (f: 'a -> 'b ->'c) =
@@ -211,7 +236,8 @@ let mxMany (p:MatrixParser<'a>) =
                     }
                 yield! loop s
             } |> List.ofSeq |> MatrixStream.fold
-        mses             
+        mses    
+              
 let mxUntil (safe: int -> bool) (p:MatrixParser<'a>) =
     fun stream ->
         let rec greed stream index =
@@ -222,7 +248,55 @@ let mxUntil (safe: int -> bool) (p:MatrixParser<'a>) =
                 else newStream
                     
             else newStream
-        greed stream 1    
+        greed stream 1  
+         
+let private combineSkipSpace (p:MatrixParser<'a>) =
+    fun xlStream ->
+        let pspace =
+            mxPText (fun s ->
+                if s.Trim() = "" then None
+                else Some s
+            )
+        let mxStream1 = pspace xlStream
+        let mxStream2 = p xlStream
+        let newStream = mxStream2 |> MatrixStream.filterOfMatrixStream id mxStream1
+        newStream
+
+let mxManySkipSpace maxCount (p:MatrixParser<'a>) =
+
+    let p = mxMany (combineSkipSpace p)                
+    fun stream ->
+        let rec greed stream spaces accum =
+            let newStream = p stream
+            let xlStream = newStream.XLStream
+            if Seq.isEmpty xlStream.userRange then
+                let spaces = spaces + 1
+                if spaces <= maxCount then 
+                    greed (XLStream.incrXShift stream) spaces accum
+                else 
+                    {
+                        XLStream = 
+                            { 
+                                stream with 
+                                    xShifts = stream.xShifts |> List.mapTail(fun s ->
+                                        s -  maxCount + 1
+                                    )
+                            }
+                        State = Seq.singleton accum 
+                    }              
+                    
+            else greed (XLStream.incrXShift xlStream) 0 (accum @ Seq.exactlyOne newStream.State)
+        let newStream = 
+            stream 
+            |> XLStream.split
+            |> Seq.map (fun stream ->
+                greed stream 0 []
+            )
+            |> List.ofSeq
+            |> MatrixStream.fold
+        newStream |> MatrixStream.filter(fun (state,range) ->
+            not state.IsEmpty
+        )      
 
 let private rPipe2 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (f: 'a -> 'b ->'c) =
     fun ms ->
@@ -251,6 +325,29 @@ let private rPipe3 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser
     )
 let r3 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser<'c>) =
     rPipe3 x y z (fun a b c -> a,b,c)     
+
+let private rPipe4 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser<'c>) (m: MatrixParser<'d>) f =
+    rPipe2 (r3 x y z) m (fun (a,b,c) d ->
+        f a b c d
+    )
+let r4 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser<'c>) (m: MatrixParser<'d>) =
+    rPipe4 x y z m (fun a b c d -> a,b,c,d)
+    
+let private rPipe5 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser<'c>) (m: MatrixParser<'d>) (n: MatrixParser<'e>) f =
+    rPipe2 (r4 x y z m) n (fun (a,b,c,d) e ->
+        f a b c d e
+    )
+let r5 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser<'c>) (m: MatrixParser<'d>) (n: MatrixParser<'e>) =
+    rPipe5 x y z m n (fun a b c d e -> a,b,c,d,e)
+
+let private rPipe6 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser<'c>) (m: MatrixParser<'d>) (n: MatrixParser<'e>) (k: MatrixParser<'f>) f =
+    rPipe2 (r5 x y z m n) k (fun (a,b,c,d,e) l ->
+        f a b c d e l
+    )
+
+let r6 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser<'c>) (m: MatrixParser<'d>) (n: MatrixParser<'e>) (k: MatrixParser<'f>) =
+    rPipe6 x y z m n k (fun a b c d e l -> a,b,c,d,e,l)
+
 let mxRowMany (p:MatrixParser<'a>) =
     fun (stream:XLStream) ->
         let singleton s = 
@@ -283,7 +380,7 @@ let mxRowMany (p:MatrixParser<'a>) =
                     }
                 yield! loop s
             } |> List.ofSeq |> MatrixStream.fold 
-        mses      
+        mses
 
 let mxRowUntil (safe: int -> bool) (p:MatrixParser<'a>) =
     fun (stream:XLStream)->
@@ -296,6 +393,42 @@ let mxRowUntil (safe: int -> bool) (p:MatrixParser<'a>) =
                     
             else newStream
         greed stream 1    
+
+let mxRowManySkipSpace maxCount (p:MatrixParser<'a>) =
+    let p = mxRowMany (combineSkipSpace p)                
+    fun stream ->
+        let rec greed stream spaces accum =
+            let newStream = p stream
+            let xlStream = newStream.XLStream
+            if Seq.isEmpty xlStream.userRange then
+                let spaces = spaces + 1
+                if spaces <= maxCount then 
+                    greed (XLStream.incrYShift stream) spaces accum
+                else 
+                    {
+                        XLStream = 
+                            { 
+                                stream with 
+                                    xShifts = 
+                                        let length = stream.xShifts.Length
+                                        stream.xShifts |> List.take(length - maxCount - 1)
+                            }
+                        State = Seq.singleton accum 
+                    }              
+                    
+            else greed (XLStream.incrYShift xlStream) 0 (accum @ Seq.exactlyOne newStream.State)
+        let newStreams = 
+            stream 
+            |> XLStream.split
+            |> Seq.map (fun stream ->
+                greed stream 0 []
+            )
+            |> List.ofSeq
+        let newStream =  newStreams |> MatrixStream.fold
+
+        newStream |> MatrixStream.filter(fun (state,range) ->
+            not state.IsEmpty
+        )           
 
 let runMatrixParser (p: MatrixParser<_>) (worksheet:ExcelWorksheet) =
     let stream = 

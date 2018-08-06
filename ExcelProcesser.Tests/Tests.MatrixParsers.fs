@@ -166,7 +166,19 @@ let MatrixParserTests =
         |> List.ofSeq
         |> function 
             | [("Begin","XUntil")] -> pass()
-            | _ -> fail()      
+            | _ -> fail()   
+
+    testCase "Parse with mxManySkipSpace operator" <| fun _ ->
+        let parser = 
+            c2
+                (!^ (pstring "黑色"))
+                (mxManySkipSpace 2  (mxOrigin))
+        runMatrixParser parser workSheet
+        |> Seq.head
+        |> function 
+            | _,["Begin";"XUntil";"Hello"] -> pass()
+            | _ -> fail()            
+
 
     testCase "Parse with rowMany operator" <| fun _ ->
         let p = 
@@ -194,7 +206,9 @@ let MatrixParserTests =
                     ("FOTZO-1",4032,84,7453089535063L),["hello";"gogo";"yes"]
                     ("KOLA-1",4032,84,7453089535070L),["yes"]
                 ] -> pass()
-            | _ -> fail()       
+            | _ -> fail()  
+
+
     testCase "Parse with mxRowMany operator" <| fun _ ->
         let parser = pSize ^<==> mxRowMany pFraction
         runMatrixParser parser workSheet
@@ -216,5 +230,16 @@ let MatrixParserTests =
         |> function 
             | [("Begin","YUntil")] -> pass()
             | _ -> fail()  
+
+    testCase "Parse with mxRowManySkipSpace operator" <| fun _ ->
+        let parser = 
+            r2
+                (!^ (pstring "黑色"))
+                (mxRowManySkipSpace 2  (mxOrigin))
+        runMatrixParser parser workSheet
+        |> Seq.head
+        |> function 
+            | _,["Begin";"YUntil";"黑色";"Begin"] -> pass()
+            | _ -> fail()   
 
   ]    

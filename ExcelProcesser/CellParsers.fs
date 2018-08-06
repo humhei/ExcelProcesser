@@ -22,9 +22,11 @@ let pFontColor (color:Color):CellParser=
         let targetColor=  toHex color
         fontColor=targetColor        
 
+
 let pText (f: string -> bool) =
     fun (cell:ExcelRangeBase)->
         f cell.Text
+
 
 let pRegex pattern:CellParser =
     pText (fun text ->
