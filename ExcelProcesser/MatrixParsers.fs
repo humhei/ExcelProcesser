@@ -331,7 +331,7 @@ let mxManySkipSpace maxCount (p:MatrixParser<'a>) =
                 greed stream 0 []
             )
             |> List.ofSeq
-            |> MatrixStream.fold
+            |> MatrixStream.foldx
         newStream |> MatrixStream.filter(fun (state,range) ->
             not state.IsEmpty
         )      
