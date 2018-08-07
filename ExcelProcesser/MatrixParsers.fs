@@ -10,6 +10,7 @@ type MatrixStream<'state> =
         State: seq<'state>
     }
 
+
 [<RequireQualifiedAccess>]
 module MatrixStream = 
     let createEmpty =
@@ -137,7 +138,15 @@ let  (!^^) (p:Parser<'a,unit>) f : MatrixParser<'a> =
                 |> Seq.map (fun cell -> cell.Offset(l,xshift))
                 |> Seq.map(fun cell -> runWithResultBack p cell.Text)                
         }
-let mxPText (f: string -> 'a option) =
+
+let (|||>) (parser: MatrixParser<'state>) f =
+    fun stream ->
+        let newStream = parser stream
+        {
+            XLStream = newStream.XLStream
+            State = newStream.State |> Seq.map f
+        }
+let mxPTextWith (f: string -> 'a option) =
     let ap = !@(pText (f >> Option.isSome))
     fun xlStream ->
         let newXLS = ap xlStream
@@ -149,8 +158,15 @@ let mxPText (f: string -> 'a option) =
                 |> Seq.map (fun cell -> cell.Offset(l,xshift))
                 |> Seq.map(fun cell -> f cell.Text |> Option.get)                
         }
+let mxPText s =
+    let p = 
+        mxPTextWith (fun t ->
+            if t.Contains s then Some t
+            else None
+        )
+    p |||> ignore
 
-let mxOrigin = mxPText (fun s -> Some s)
+let mxOrigin = mxPTextWith (fun s -> Some s)
 
 let  (!^) (p:Parser<'a,unit>) : MatrixParser<'a> = 
     (!^^) p (fun _ -> true)
@@ -171,13 +187,7 @@ let private xlpipe2 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (f: 'a -> 'b ->
                 f ls rs
             )
         }   
-let (|||>) (parser: MatrixParser<'state>) f =
-    fun stream ->
-        let newStream = parser stream
-        {
-            XLStream = newStream.XLStream
-            State = newStream.State |> Seq.map f
-        }
+
 
 let (!^=) p = (!^) p |||> ignore
 let (!^^=) p f = (!^^) p f |||> ignore
@@ -253,7 +263,7 @@ let mxUntil (safe: int -> bool) (p:MatrixParser<'a>) =
 let private combineSkipSpace (p:MatrixParser<'a>) =
     fun xlStream ->
         let pspace =
-            mxPText (fun s ->
+            mxPTextWith (fun s ->
                 if s.Trim() = "" then None
                 else Some s
             )
