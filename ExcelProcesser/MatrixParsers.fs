@@ -105,7 +105,35 @@ module MatrixStream =
             } |> sort           
         | [] -> createEmpty
 
-
+    let foldx (mses: list<MatrixStream<_>>) =
+        match mses with 
+        | h :: t ->
+            let addes = 
+                mses |> List.collect (fun ms ->
+                    let s = ms.XLStream |> XLStream.applyXShift
+                    List.ofSeq s.userRange
+                ) |> Excel.distinctRanges |> List.map (fun r -> r.Address)
+            let r = 
+                mses |> List.map ( fun ms ->
+                    let l = ms.XLStream.xShifts |> List.last
+                    filter (fun (_,cell) ->
+                        let address = 
+                            cell.Offset (0,0,1,l + 1) |> fun cell -> cell.Address
+                        List.contains address addes
+                    ) ms
+                )
+            let states = r |> Seq.collect (fun ms -> ms.State)  
+            let ranges = r |> Seq.collect (fun ms -> ms.XLStream.userRange)  
+            let shift = r |> Seq.map (fun ms -> ms.XLStream.xShifts) |> Seq.maxBy Seq.length 
+            {
+                State = states
+                XLStream =
+                    {
+                        xShifts = shift
+                        userRange = ranges
+                    }
+            } |> sort           
+        | [] -> createEmpty
 
 type MatrixParser<'state> = XLStream -> MatrixStream<'state>
 
@@ -245,7 +273,7 @@ let mxMany (p:MatrixParser<'a>) =
                             yield! loop newS  
                     }
                 yield! loop s
-            } |> List.ofSeq |> MatrixStream.fold
+            } |> List.ofSeq |> MatrixStream.foldx
         mses    
               
 let mxUntil (safe: int -> bool) (p:MatrixParser<'a>) =

@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net462;netstandard2.0</TargetFrameworks>
-    <Version>0.3.2-RC001</Version>
+    <Version>0.3.2-RC002</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Linq.fs" />
