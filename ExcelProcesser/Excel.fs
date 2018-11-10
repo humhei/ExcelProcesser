@@ -2,6 +2,7 @@ namespace ExcelProcess
 //Below code adpated from igorkulman's ExcelPackageF
 //https://github.com/igorkulman/ExcelPackageF
 open OfficeOpenXml.FormulaParsing.Excel.Functions.RefAndLookup
+open System.Collections.Generic
 [<RequireQualifiedAccess>]
 module Address =
     let isCell (add:string) =
@@ -14,12 +15,10 @@ module Excel=
     open OfficeOpenXml
     open System.IO
     open FParsec
-    let getWorksheets filename = seq {
+    let getWorksheets filename : ExcelWorksheet seq = 
         let file = FileInfo(filename) 
         let xlPackage = new ExcelPackage(file)
-        for i in 1..xlPackage.Workbook.Worksheets.Count do
-            yield xlPackage.Workbook.Worksheets.[i]
-        }
+        xlPackage.Workbook.Worksheets :> IEnumerable<ExcelWorksheet>
     let getWorksheetByIndex (index:int) filename = 
         if not (File.Exists filename) then 
             failwithf "file%s is not existed" filename

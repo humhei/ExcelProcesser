@@ -28,5 +28,5 @@ let sp3 p1 p2 p3 = spf3 p1 p2 p3 (fun a b c -> a,b,c)
 let spf4 p1 p2 p3 p4 f =
     spf2 (sp3 p1 p2 p3) p4 (fun (s1,s2,s3) s4 -> f s1 s2 s3 s4)
 
-let sp4 p1 p2 p3 p4 f =
+let sp4 p1 p2 p3 p4 =
     spf4 p1 p2 p3 p4 (fun s1 s2 s3 s4 -> s1,s2,s3,s4)

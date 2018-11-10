@@ -195,6 +195,7 @@ let mxPText s =
     p |||> ignore
 
 let mxOrigin = mxPTextWith (fun s -> Some s)
+let mxSkipOrigin = mxPTextWith (fun s -> Some s) |||> ignore
 
 let  (!^) (p:Parser<'a,unit>) : MatrixParser<'a> = 
     (!^^) p (fun _ -> true)
@@ -287,22 +288,18 @@ let mxUntil (safe: int -> bool) (p:MatrixParser<'a>) =
                     
             else newStream
         greed stream 1  
-         
-let private combineSkipSpace (p:MatrixParser<'a>) =
+
+let private combineSkipWith pskip (p:MatrixParser<'a>) =
     fun xlStream ->
-        let pspace =
-            mxPTextWith (fun s ->
-                if s.Trim() = "" then None
-                else Some s
-            )
-        let mxStream1 = pspace xlStream
+        let mxStream1 = pskip xlStream
         let mxStream2 = p xlStream
         let newStream = mxStream2 |> MatrixStream.filterOfMatrixStream id mxStream1
         newStream
 
-let mxManySkipSpace maxCount (p:MatrixParser<'a>) =
 
-    let p = mxMany (combineSkipSpace p)                
+let mxManyWithSkip (pSkip: MatrixParser<unit>) maxCount (p:MatrixParser<'a>) =
+
+    let p = mxMany (combineSkipWith pSkip p)                
     fun stream ->
         let rec greed stream spaces accum =
             let newStream = p stream
@@ -334,7 +331,16 @@ let mxManySkipSpace maxCount (p:MatrixParser<'a>) =
             |> MatrixStream.foldx
         newStream |> MatrixStream.filter(fun (state,range) ->
             not state.IsEmpty
-        )      
+        )    
+
+let pspace =
+    mxPTextWith (fun s ->
+        if s.Trim() = "" then None
+        else Some ()
+    )
+
+let mxManySkipSpace maxCount (p:MatrixParser<'a>) =
+    mxManyWithSkip pspace maxCount p
 
 let private rPipe2 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (f: 'a -> 'b ->'c) =
     fun ms ->
@@ -432,8 +438,8 @@ let mxRowUntil (safe: int -> bool) (p:MatrixParser<'a>) =
             else newStream
         greed stream 1    
 
-let mxRowManySkipSpace maxCount (p:MatrixParser<'a>) =
-    let p = mxRowMany (combineSkipSpace p)                
+let mxRowManySkipWith pskip maxCount (p:MatrixParser<'a>) =
+    let p = mxRowMany (combineSkipWith pskip p)                
     fun stream ->
         let rec greed stream spaces accum =
             let newStream = p stream
@@ -468,6 +474,11 @@ let mxRowManySkipSpace maxCount (p:MatrixParser<'a>) =
             not state.IsEmpty
         )           
 
+let mxRowManySkipSpace maxCount (p:MatrixParser<'a>) =
+    mxRowManySkipWith pspace maxCount p
+
+let mxRowManySkipOrigin maxCount (p:MatrixParser<'a>) =
+    mxRowManySkipWith mxSkipOrigin maxCount p
 let runMatrixParser (p: MatrixParser<_>) (worksheet:ExcelWorksheet) =
     let stream = 
         worksheet
