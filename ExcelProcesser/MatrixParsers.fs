@@ -480,15 +480,7 @@ let mxRowManySkipSpace maxCount (p:MatrixParser<'a>) =
 
 let mxRowManySkipOrigin maxCount (p:MatrixParser<'a>) =
     mxRowManySkipWith mxSkipOrigin maxCount p
-let runMatrixParser (p: MatrixParser<_>) (worksheet:ExcelWorksheet) =
-    let stream = 
-        worksheet
-        |>Excel.getUserRange
-        |>Seq.cache
-        |>Seq.map CommonExcelRangeBase.Core
-        |>fun c->{userRange=c;xShifts=[0]}
-    p stream
-    |> fun mp -> mp.State
+
 
 let u2 p1 p2 =
     fun (stream: XLStream) ->
@@ -500,3 +492,16 @@ let u2 p1 p2 =
                 newStream
             else newStream2
         else newStream
+
+let runMatrixParserForRanges (p: MatrixParser<_>) (ranges:seq<CommonExcelRangeBase>) =
+    let stream = {userRange=ranges;xShifts=[0]}
+    let newStream = p stream
+    newStream.State
+    
+let runMatrixParser (p: MatrixParser<_>) (worksheet:ExcelWorksheet) =
+    let ranges = 
+        worksheet
+        |>Excel.getUserRange
+        |>Seq.cache
+        |>Seq.map CommonExcelRangeBase.Core
+    runMatrixParserForRanges p ranges 

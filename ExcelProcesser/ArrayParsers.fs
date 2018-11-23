@@ -227,11 +227,16 @@ let rowMany (p:ArrayParser) :ArrayParser =
 let filter (options:ArrayParser list) :ArrayParser=
     options |> List.reduce (^+>>)
 
-let runArrayParser (parser:ArrayParser)  worksheet=
-    worksheet
-    |>Excel.getUserRange
-    |>Seq.cache
-    |>Seq.map CommonExcelRangeBase.Core
-    |>fun c->{userRange=c;xShifts=[0]}
-    |>parser     
+let runArrayParserForRanges (parser:ArrayParser) ranges =
+    parser {userRange=ranges;xShifts=[0]}
+
+
+
+let runArrayParser (parser:ArrayParser) worksheet=
+    let ranges = 
+        worksheet
+        |>Excel.getUserRange
+        |>Seq.cache
+        |>Seq.map CommonExcelRangeBase.Core
+    runArrayParserForRanges parser ranges
 
