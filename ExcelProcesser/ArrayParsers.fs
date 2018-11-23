@@ -1,11 +1,11 @@
 module ExcelProcess.ArrayParsers
-open OfficeOpenXml
 open System.Linq.Expressions
 open CellParsers
+open ExcelProcess.Bridge
 type Shift= int
  
 type XLStream=
-    {userRange:seq<ExcelRangeBase>
+    {userRange:seq<CommonExcelRangeBase>
      xShifts:Shift list}
 
 module XLStream =
@@ -181,7 +181,7 @@ let xlMany (p:ArrayParser) :ArrayParser =
             userRange =
                 r |> Seq.collect (fun c ->
                     c.userRange
-                ) |> Excel.distinctRanges
+                ) |> CommonExcelRangeBase.distinctRanges
             xShifts = List.replicate (Seq.length r) 0                
         }  
 
@@ -219,7 +219,7 @@ let rowMany (p:ArrayParser) :ArrayParser =
             userRange =
                 r |> Seq.collect (fun c ->
                     c.userRange
-                ) |> Excel.distinctRanges
+                ) |> CommonExcelRangeBase.distinctRanges
             xShifts = List.replicate (Seq.length r) 0                
         }                  
 
@@ -231,6 +231,7 @@ let runArrayParser (parser:ArrayParser)  worksheet=
     worksheet
     |>Excel.getUserRange
     |>Seq.cache
+    |>Seq.map CommonExcelRangeBase.Core
     |>fun c->{userRange=c;xShifts=[0]}
     |>parser     
 

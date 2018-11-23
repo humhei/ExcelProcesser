@@ -13,7 +13,7 @@ let testConfig =
 let tests = 
     testList "All tests" [  
         ArrayParserTests
-        MatrixParserTests
+        //MatrixParserTests
     ]
 
 [<EntryPoint>]

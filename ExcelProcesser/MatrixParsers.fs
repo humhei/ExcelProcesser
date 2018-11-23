@@ -3,6 +3,7 @@ open OfficeOpenXml
 open System.IO
 open CellParsers
 open ArrayParsers
+open ExcelProcess.Bridge
 
 type MatrixStream<'state> =
     {
@@ -58,7 +59,7 @@ module MatrixStream =
     let filterOfMatrixStream f ms1 ms2 =
         ms2 |> filter (fun (_,cell1) ->
             ms1.XLStream.userRange 
-            |> Seq.exists (Excel.contain cell1)
+            |> Seq.exists (CommonExcelRangeBase.contain cell1)
             |> f
         )     
     let sort ms = 
@@ -81,7 +82,7 @@ module MatrixStream =
                 mses |> List.collect (fun ms ->
                     let s = ms.XLStream |> XLStream.applyYShift
                     List.ofSeq s.userRange
-                ) |> Excel.distinctRanges |> List.map (fun r -> r.Address)
+                ) |> CommonExcelRangeBase.distinctRanges |> List.map (fun r -> r.Address)
             let r = 
                 mses |> List.map ( fun ms ->
                     let l = ms.XLStream.xShifts.Length
@@ -112,7 +113,7 @@ module MatrixStream =
                 mses |> List.collect (fun ms ->
                     let s = ms.XLStream |> XLStream.applyXShift
                     List.ofSeq s.userRange
-                ) |> Excel.distinctRanges |> List.map (fun r -> r.Address)
+                ) |> CommonExcelRangeBase.distinctRanges |> List.map (fun r -> r.Address)
             let r = 
                 mses |> List.map ( fun ms ->
                     let l = ms.XLStream.xShifts |> List.last
@@ -206,7 +207,7 @@ let private xlpipe2 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (f: 'a -> 'b ->
         let left = 
             s1 |> MatrixStream.filter (fun (_,cell1) ->
                 s2.XLStream.userRange 
-                |> Seq.exists (Excel.contain cell1)  
+                |> Seq.exists (CommonExcelRangeBase.contain cell1)  
             )
         let right = s2.State             
         { 
@@ -349,7 +350,7 @@ let private rPipe2 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (f: 'a -> 'b ->'
         let left = 
             s1 |> MatrixStream.filter (fun (_,cell1) ->
                 s2.XLStream.userRange 
-                |> Seq.exists (Excel.contain cell1)  
+                |> Seq.exists (CommonExcelRangeBase.contain cell1)  
             )
 
         let right = s2.State             
@@ -484,6 +485,7 @@ let runMatrixParser (p: MatrixParser<_>) (worksheet:ExcelWorksheet) =
         worksheet
         |>Excel.getUserRange
         |>Seq.cache
+        |>Seq.map CommonExcelRangeBase.Core
         |>fun c->{userRange=c;xShifts=[0]}
     p stream
     |> fun mp -> mp.State

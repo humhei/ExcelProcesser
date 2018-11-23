@@ -3,6 +3,7 @@ namespace ExcelProcess
 //https://github.com/igorkulman/ExcelPackageF
 open OfficeOpenXml.FormulaParsing.Excel.Functions.RefAndLookup
 open System.Collections.Generic
+
 [<RequireQualifiedAccess>]
 module Address =
     let isCell (add:string) =
@@ -16,21 +17,16 @@ module Excel=
     open System.IO
     open FParsec
     let getWorksheets filename : ExcelWorksheet seq = 
+        if not (File.Exists filename) then 
+            failwithf "file%s is not existed" filename
         let file = FileInfo(filename) 
         let xlPackage = new ExcelPackage(file)
         xlPackage.Workbook.Worksheets :> IEnumerable<ExcelWorksheet>
     let getWorksheetByIndex (index:int) filename = 
-        if not (File.Exists filename) then 
-            failwithf "file%s is not existed" filename
-        let file = FileInfo(filename) 
-        let xlPackage = new ExcelPackage(file)
-        xlPackage.Workbook.Worksheets.[index]
+        getWorksheets filename |> Seq.item index
+
     let getWorksheetByName (name:string) filename = 
-        if not (File.Exists filename) then 
-            failwithf "file%s is not existed" filename
-        let file = FileInfo(filename) 
-        let xlPackage = new ExcelPackage(file)
-        xlPackage.Workbook.Worksheets |> Seq.find (fun ws ->
+        getWorksheets filename |> Seq.find (fun ws ->
             ws.Name = name
         )
 

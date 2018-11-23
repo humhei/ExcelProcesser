@@ -7,3 +7,4 @@ nuget FParsec
 nuget FSharp.Core 4.3.4
 nuget Fake
 nuget Fake.IO.FileSystem
+nuget Microsoft.Office.Interop.Excel
