@@ -28,6 +28,10 @@ let pText (f: string -> bool) =
         f cell.Text
 
 
+let pMerged :CellParser =
+    fun (cell:CommonExcelRangeBase)->
+        cell.Merge
+
 let pRegex pattern:CellParser =
     pText (fun text ->
         let m=Regex.Match(text, pattern)

@@ -227,6 +227,10 @@ module ExcelRangeBase =
 
     let reset (range: ExcelRangeBase) =
         range.Reset()
+
+    let isMerged (range: ExcelRangeBase) =
+        range.Merge
+
 #if NET462
 module Range =
 
@@ -262,6 +266,11 @@ module Range =
 
     let reset (range: Range) =
         ()    
+
+    let isMerged (range: Range) =
+        range.MergeArea.Columns.Count > 1
+        || range.MergeArea.Rows.Count > 1
+
 #endif
 
 [<RequireQualifiedAccess>]
@@ -401,6 +410,12 @@ with
             Range.address
             #endif
 
+    member x.Merge =
+        x.Map
+            ExcelRangeBase.isMerged
+            #if NET462
+            Range.isMerged
+            #endif
 
 [<RequireQualifiedAccess>]
 module Address =

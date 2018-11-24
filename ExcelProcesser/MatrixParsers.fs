@@ -146,7 +146,8 @@ let runWithResultBack parser (s:string) =
 
 let  (!!) (p: ArrayParser) = 
     fun xlStream ->
-        { XLStream = p xlStream; State = xlStream.userRange |> List.map ignore }    
+        let newXlStream = p xlStream
+        { XLStream = newXlStream; State = newXlStream.userRange |> List.map ignore }    
                          
 let mxXPlaceHolder num =
     !! (xPlaceholder num)
@@ -197,7 +198,7 @@ let mxPText s =
 let mxOrigin = mxPTextWith (fun s -> Some s)
 let mxSkipOrigin = mxPTextWith (fun s -> Some s) |||> ignore
 
-let  (!^) (p:Parser<'a,unit>) : MatrixParser<'a> = 
+let (!^) (p:Parser<'a,unit>) : MatrixParser<'a> = 
     (!^^) p (fun _ -> true)
 let private xlpipe2 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (f: 'a -> 'b ->'c) =
     fun xlStream ->
@@ -501,4 +502,10 @@ let runMatrixParser (p: MatrixParser<_>) (worksheet:ExcelWorksheet) =
         worksheet
         |>Excel.getUserRange
         |>List.map CommonExcelRangeBase.Core
+    runMatrixParserForRanges p ranges 
+
+let runMatrixParserCommon (p: MatrixParser<_>) (worksheet:CommonSheet) =
+    let ranges = 
+        worksheet
+        |>CommonSheet.getUserRange
     runMatrixParserForRanges p ranges 

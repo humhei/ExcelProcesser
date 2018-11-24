@@ -90,7 +90,7 @@ let (!@) (p:CellParser):ArrayParser=
         let y=stream.xShifts.Length - 1
         let x=stream.xShifts |> Seq.last
         stream.userRange
-        |>List.where(fun c-> 
+        |>List.filter(fun c-> 
             let cell = c.Offset(y,x,1,1)
             let r = p cell
             if not r && cell.Text.Trim() <> "" then 
@@ -106,7 +106,7 @@ let (!@) (p:CellParser):ArrayParser=
 let (+>>) (p1:ArrayParser) (p2:ArrayParser):ArrayParser=
     let p2=fun (stream:XLStream)->
         let shift=stream.xShifts|>List.mapTail(fun c->c+1)
-        p2  {stream with xShifts=shift;}
+        p2  {stream with xShifts=shift}
     p1>>p2
 
 let (>>+) (p1:ArrayParser) (p2:ArrayParser):ArrayParser=

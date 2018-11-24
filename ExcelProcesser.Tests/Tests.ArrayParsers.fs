@@ -40,6 +40,21 @@ let ArrayParserTests =
         match reply with
           |["D2";"D4";"D11";"D13"]->pass()
           |_->fail()
+
+    testCase "Parse merged range Test" <| fun _ -> 
+        let parser:ArrayParser=
+            //match cells beginning with GD
+            !@pMerged
+        let reply=
+            workSheet
+            |>runArrayParserCommon parser
+            |>fun c->c.userRange
+            |>Seq.map(fun c->c.Address)
+            |>List.ofSeq
+        match reply with
+          |["B1";"C1"]->pass()
+          |_->fail()
+
     testCase "Parse with AND Test" <| fun _ -> 
         let parser:ArrayParser=
             //match cells of which text begins with GD,
