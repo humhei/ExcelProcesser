@@ -12,9 +12,8 @@ let getColor (color:CommonExcelColor)=
     else "#"+color.Rgb
 let pBkColor (color:Color):CellParser=
     fun (cell:CommonExcelRangeBase)->
-        let toHex (color:Color)=sprintf "#%02X%02X%02X%02X" color.A color.R color.G color.B
         let bkColor=cell.Style.Fill.BackgroundColor|>getColor
-        let targetColor=  toHex color
+        let targetColor=  Color.toHex color
         bkColor=targetColor
 let pFontColor (color:Color):CellParser=
     fun (cell:CommonExcelRangeBase)->

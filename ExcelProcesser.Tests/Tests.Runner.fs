@@ -18,4 +18,8 @@ let tests =
 
 [<EntryPoint>]
 let main _ = 
-    runTests testConfig tests
+    let v = runTests testConfig tests
+    #if NET462
+    Tests.Types.app.Quit()
+    #endif
+    v

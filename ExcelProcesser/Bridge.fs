@@ -5,27 +5,40 @@ open OfficeOpenXml.Style
 open FParsec.CharParsers
 open System.Collections.Generic
 open System.Collections
+
+
+[<RequireQualifiedAccess>]
+module Color =
+    let toHex (color:System.Drawing.Color)=sprintf "#%02X%02X%02X%02X" color.A color.R color.G color.B
+
 #if NET462
 open Microsoft.Office.Interop.Excel
 
+
+
 type InteropColor =
     {
-        Rgb: string
+        RgbColor: System.Drawing.Color
         Indexed: int
     }
 with 
-    member x.LookupColor() = "#" + x.Rgb
+    member x.Rgb = Color.toHex x.RgbColor
+    member x.LookupColor() = x.Rgb
 
 [<RequireQualifiedAccess>]
 module InteropColor =
+    let private colorFromOle (color: obj) =
+        let v = color :?> double |> int
+        System.Drawing.ColorTranslator.FromOle(v)
+
     let ofInterior (fill: Interior) =
         {
-            Rgb = fill.Color :?> string
+            RgbColor = colorFromOle fill.Color
             Indexed = fill.ColorIndex :?> int
         }
     let ofFont (font: Font) =
         {
-            Rgb = font.Color :?> string
+            RgbColor = colorFromOle font.Color
             Indexed = font.ColorIndex :?> int
         }
 #endif
@@ -131,10 +144,10 @@ module ExcelStyle =
 
 #if NET462
 module Style =
-    let fill (excelStyle: Style) =
-        CommonFill.Interop excelStyle.Interior
-    let font (excelStyle: Style) =
-        CommonFont.Interop excelStyle.Font
+    let fill (range: Range, excelStyle: Style) =
+        CommonFill.Interop range.Interior
+    let font (range: Range,excelStyle: Style) =
+        CommonFont.Interop range.Font
 #endif
 
 
@@ -142,7 +155,7 @@ module Style =
 type CommonStyle =
     | Core of ExcelStyle
     #if NET462
-    | Interop of Style
+    | Interop of Range * Style
     #endif
 
 with 
@@ -155,7 +168,7 @@ with
         match x with
         | Core style -> fCore style |> Core
         #if NET462
-        | Interop style -> fInterop style |> Interop
+        | Interop (range,style) -> fInterop (range,style) |> Interop
         #endif
 
     member private x.Map 
@@ -167,7 +180,7 @@ with
         match x with
         | Core style -> fCore style
         #if NET462
-        | Interop style -> fInterop style
+        | Interop (range,style) -> fInterop (range,style)
         #endif
 
     member x.Fill = 
@@ -227,16 +240,16 @@ module Range =
         range.Rows.Count
 
     let columns (range: Range) =
-        range.Rows.Count
+        range.Columns.Count
 
     let style (range: Range) =
-        CommonStyle.Interop (range.Style :?> Style)
+        CommonStyle.Interop (range,range.Style :?> Style)
 
     let text (range: Range) =
         range.Text :?> string
     
     let address (range: Range) =
-        range.Address()
+        range.Address().Replace("$","")
 
     let current (range: Range) =
         range.CurrentRegion
@@ -245,7 +258,7 @@ module Range =
     let moveNext (range: Range) =
         match range.Next with
         | null -> false
-        | _ -> false
+        | _ -> true
 
     let reset (range: Range) =
         ()    
@@ -476,20 +489,20 @@ module ExcelWorksheet =
     let getMaxRowNumber (worksheet:ExcelWorksheet) = 
         worksheet.Dimension.End.Row     
 
-    let getUserRange  worksheet:seq<ExcelRangeBase> = seq {        
+    let getUserRange  worksheet:list<ExcelRangeBase> =
         let maxRow = getMaxRowNumber worksheet
         let maxCol = getMaxColNumber worksheet
-        for i in 1..maxRow do
-            for j in 1..maxCol do
-                let content = worksheet.Cells.[i,j]
-                yield content:>ExcelRangeBase
-    }
+        [        
+            for i in 1..maxRow do
+                for j in 1..maxCol do
+                    let content = worksheet.Cells.[i,j]
+                    yield content:>ExcelRangeBase
+        ]
 
 
 #if NET462
 module Worksheet =
-    let getWorksheetByIndex (index:int) (fileName: string) = 
-        let app = ApplicationClass()
+    let getWorksheetByIndex (index:int) (fileName: string) (app:Application) = 
         let workbook = app.Workbooks.Open(fileName)
         workbook.Worksheets.Item(index + 1) :?> Worksheet
     let getUserRange (sheet: Worksheet) =
@@ -500,12 +513,12 @@ module Worksheet =
         let maxCol = 
             let count = Range.columns userRange
             count + userRange.Column
-        seq {
+        [
             for i in 1..maxRow do
                 for j in 1..maxCol do
                     let content = userRange.Cells.[i,j]
                     yield content :?> Range
-        }
+        ]
 #endif
 
 [<RequireQualifiedAccess>]
@@ -518,9 +531,9 @@ type CommonSheet =
 module CommonSheet =
     let getUserRange commonSheet =
         match commonSheet with 
-        | CommonSheet.Core sheet -> ExcelWorksheet.getUserRange sheet |> Seq.map CommonExcelRangeBase.Core
+        | CommonSheet.Core sheet -> ExcelWorksheet.getUserRange sheet |> List.map CommonExcelRangeBase.Core
         #if NET462
-        | CommonSheet.Interop sheet -> Worksheet.getUserRange sheet |> Seq.map CommonExcelRangeBase.Interop
+        | CommonSheet.Interop sheet -> Worksheet.getUserRange sheet |> List.map CommonExcelRangeBase.Interop
         #endif
 
 

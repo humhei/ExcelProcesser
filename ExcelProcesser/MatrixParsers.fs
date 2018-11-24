@@ -500,6 +500,5 @@ let runMatrixParser (p: MatrixParser<_>) (worksheet:ExcelWorksheet) =
     let ranges = 
         worksheet
         |>Excel.getUserRange
-        |>List.ofSeq
         |>List.map CommonExcelRangeBase.Core
     runMatrixParserForRanges p ranges 

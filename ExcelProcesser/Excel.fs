@@ -42,15 +42,17 @@ module Excel=
                 let content = worksheet.Cells.[i,j].Value
                 yield content
     }
-    let getUserRange  worksheet:seq<ExcelRangeBase> = seq {        
+    let getUserRange worksheet:list<ExcelRangeBase> =
         let maxRow = getMaxRowNumber worksheet
         let maxCol = getMaxColNumber worksheet
-        for i in 1..maxRow do
-            for j in 1..maxCol do
-                let content = worksheet.Cells.[i,j]
-                yield content:>ExcelRangeBase
+
+        [        
+            for i in 1..maxRow do
+                for j in 1..maxCol do
+                    let content = worksheet.Cells.[i,j]
+                    yield content:>ExcelRangeBase
               
-    }
+        ]
 
     let translate address (xOffset:int) (yOffset:int) =
         ExcelCellBase.TranslateFromR1C1(ExcelCellBase.TranslateToR1C1(address, -yOffset, -xOffset), 0, 0)

@@ -234,14 +234,13 @@ let runArrayParser (parser:ArrayParser) worksheet=
     let ranges = 
         worksheet
         |>Excel.getUserRange
-        |>Seq.map CommonExcelRangeBase.Core
-        |>List.ofSeq
+        |>List.map CommonExcelRangeBase.Core
     runArrayParserForRanges parser ranges
 
 let runArrayParserCommon (parser:ArrayParser) (worksheet: CommonSheet) =
     let ranges = 
         worksheet
         |>CommonSheet.getUserRange
-        |>List.ofSeq
+
     runArrayParserForRanges parser ranges
 
