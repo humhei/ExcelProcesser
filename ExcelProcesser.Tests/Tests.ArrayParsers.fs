@@ -8,7 +8,14 @@ open FParsec
 open Tests.Types
 let pass() = Expect.isTrue true "passed"
 let fail() = Expect.isTrue false "failed"
-let workSheet = XLPath.test |> Excel.getWorksheetByIndex 0
+let workSheet = 
+    let path = XLPath.test
+    #if NETCOREAPP2_1
+    path |> Excel.getWorksheetByIndex 0
+    #endif
+    #if NET462
+    path |> Excel.getWorksheetByIndex 0
+    #endif
 let ArrayParserTests =
   testList "ParserTests" [
     testCase "Parse cell Test" <| fun _ -> 

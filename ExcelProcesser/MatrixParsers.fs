@@ -8,7 +8,7 @@ open ExcelProcess.Bridge
 type MatrixStream<'state> =
     {
         XLStream : XLStream 
-        State: seq<'state>
+        State: list<'state>
     }
 
 
@@ -18,15 +18,15 @@ module MatrixStream =
         {
             XLStream = 
                 {
-                    userRange = Seq.empty
+                    userRange = List.empty
                     xShifts = []
                 }
-            State = Seq.empty
+            State = List.empty
         }
     let ofXLStream stream =
         {
             XLStream = stream
-            State = stream.userRange |> Seq.map ignore           
+            State = stream.userRange |> List.map ignore           
         }
     let incrXShift ms =
         {
@@ -44,33 +44,32 @@ module MatrixStream =
     let shuffle f ms =
         let state,ranges = 
             ms.XLStream.userRange 
-            |> Seq.zip ms.State    
+            |> List.zip ms.State    
             |> f
-            |> List.ofSeq
             |> List.unzip
+
         { ms with 
             State = state
             XLStream = {ms.XLStream with userRange = ranges}}
     let filter f ms =
         ms |> shuffle (fun zips ->
-            zips |> Seq.filter f
+            zips |> List.filter f
         )      
         
     let filterOfMatrixStream f ms1 ms2 =
         ms2 |> filter (fun (_,cell1) ->
             ms1.XLStream.userRange 
-            |> Seq.exists (CommonExcelRangeBase.contain cell1)
+            |> List.exists (CommonExcelRangeBase.contain cell1)
             |> f
         )     
     let sort ms = 
         let states,ranges =
-            Seq.zip  ms.State ms.XLStream.userRange 
-            |> Seq.sortBy (fun (_,s) ->
+            List.zip ms.State ms.XLStream.userRange 
+            |> List.sortBy (fun (_,s) ->
                 let cell = s |> Seq.head
                 let c00,r00 = Excel.parseCellAddress cell.Address
                 r00,c00
             ) 
-            |> List.ofSeq 
             |> List.unzip     
         { ms with 
             State = states
@@ -81,7 +80,7 @@ module MatrixStream =
             let addes = 
                 mses |> List.collect (fun ms ->
                     let s = ms.XLStream |> XLStream.applyYShift
-                    List.ofSeq s.userRange
+                    s.userRange
                 ) |> CommonExcelRangeBase.distinctRanges |> List.map (fun r -> r.Address)
             let r = 
                 mses |> List.map ( fun ms ->
@@ -93,9 +92,9 @@ module MatrixStream =
                         List.contains address addes
                     ) ms
                 )
-            let states = r |> Seq.collect (fun ms -> ms.State)  
-            let ranges = r |> Seq.collect (fun ms -> ms.XLStream.userRange)  
-            let shift = r |> Seq.map (fun ms -> ms.XLStream.xShifts) |> Seq.maxBy Seq.length 
+            let states = r |> List.collect (fun ms -> ms.State)  
+            let ranges = r |> List.collect (fun ms -> ms.XLStream.userRange)  
+            let shift = r |> List.map (fun ms -> ms.XLStream.xShifts) |> List.maxBy List.length 
             {
                 State = states
                 XLStream =
@@ -112,7 +111,7 @@ module MatrixStream =
             let addes = 
                 mses |> List.collect (fun ms ->
                     let s = ms.XLStream |> XLStream.applyXShift
-                    List.ofSeq s.userRange
+                    s.userRange
                 ) |> CommonExcelRangeBase.distinctRanges |> List.map (fun r -> r.Address)
             let r = 
                 mses |> List.map ( fun ms ->
@@ -123,9 +122,9 @@ module MatrixStream =
                         List.contains address addes
                     ) ms
                 )
-            let states = r |> Seq.collect (fun ms -> ms.State)  
-            let ranges = r |> Seq.collect (fun ms -> ms.XLStream.userRange)  
-            let shift = r |> Seq.map (fun ms -> ms.XLStream.xShifts) |> Seq.maxBy Seq.length 
+            let states = r |> List.collect (fun ms -> ms.State)  
+            let ranges = r |> List.collect (fun ms -> ms.XLStream.userRange)  
+            let shift = r |> List.map (fun ms -> ms.XLStream.xShifts) |> List.maxBy List.length 
             {
                 State = states
                 XLStream =
@@ -147,7 +146,7 @@ let runWithResultBack parser (s:string) =
 
 let  (!!) (p: ArrayParser) = 
     fun xlStream ->
-        { XLStream = p xlStream; State = xlStream.userRange |> Seq.map ignore }    
+        { XLStream = p xlStream; State = xlStream.userRange |> List.map ignore }    
                          
 let mxXPlaceHolder num =
     !! (xPlaceholder num)
@@ -164,8 +163,8 @@ let  (!^^) (p:Parser<'a,unit>) f : MatrixParser<'a> =
         {
             XLStream = newXLS
             State = newXLS.userRange 
-                |> Seq.map (fun cell -> cell.Offset(l,xshift))
-                |> Seq.map(fun cell -> runWithResultBack p cell.Text)                
+                |> List.map (fun cell -> cell.Offset(l,xshift))
+                |> List.map(fun cell -> runWithResultBack p cell.Text)                
         }
 
 let (|||>) (parser: MatrixParser<'state>) f =
@@ -173,7 +172,7 @@ let (|||>) (parser: MatrixParser<'state>) f =
         let newStream = parser stream
         {
             XLStream = newStream.XLStream
-            State = newStream.State |> Seq.map f
+            State = newStream.State |> List.map f
         }
 let mxPTextWith (f: string -> 'a option) =
     let ap = !@(pText (f >> Option.isSome))
@@ -184,8 +183,8 @@ let mxPTextWith (f: string -> 'a option) =
         {
             XLStream = newXLS
             State = newXLS.userRange 
-                |> Seq.map (fun cell -> cell.Offset(l,xshift))
-                |> Seq.map(fun cell -> f cell.Text |> Option.get)                
+                |> List.map (fun cell -> cell.Offset(l,xshift))
+                |> List.map(fun cell -> f cell.Text |> Option.get)                
         }
 let mxPText s =
     let p = 
@@ -207,13 +206,13 @@ let private xlpipe2 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (f: 'a -> 'b ->
         let left = 
             s1 |> MatrixStream.filter (fun (_,cell1) ->
                 s2.XLStream.userRange 
-                |> Seq.exists (CommonExcelRangeBase.contain cell1)  
+                |> List.exists (CommonExcelRangeBase.contain cell1)  
             )
         let right = s2.State             
         { 
             XLStream =            
                 s2.XLStream
-            State = Seq.zip left.State right |> Seq.map (fun (ls,rs) ->
+            State = List.zip left.State right |> List.map (fun (ls,rs) ->
                 f ls rs
             )
         }   
@@ -247,7 +246,7 @@ let mxMany (p:MatrixParser<'a>) =
             
     fun (stream:XLStream) ->
         let singleton s = 
-            { State = s.State |> Seq.map List.singleton 
+            { State = s.State |> List.map List.singleton 
               XLStream = s.XLStream }
         let s = p stream |> singleton
         let mses =
@@ -258,18 +257,18 @@ let mxMany (p:MatrixParser<'a>) =
                         { filteredMS with 
                             XLStream = { filteredMS.XLStream with xShifts = ms1.XLStream.xShifts }
                             State = 
-                                Seq.map2 (fun list a -> 
+                                List.map2 (fun list a -> 
                                     list @ [a]) filteredMS.State ms1.State
                         }
                     let newS = collect (ms.XLStream |> XLStream.incrXShift |> p) ms
                     let lifted = 
                         let filteredMS = MatrixStream.filterOfMatrixStream not newS ms
-                        if Seq.isEmpty filteredMS.XLStream.userRange then 
+                        if List.isEmpty filteredMS.XLStream.userRange then 
                             []
                         else [filteredMS]                                                        
                     seq {                   
                         yield! lifted
-                        if Seq.isEmpty newS.XLStream.userRange then 
+                        if List.isEmpty newS.XLStream.userRange then 
                             yield! []
                         else 
                             yield! loop newS  
@@ -283,7 +282,7 @@ let mxUntil (safe: int -> bool) (p:MatrixParser<'a>) =
         let rec greed stream index =
             let newStream = p stream
             let xlStream = newStream.XLStream
-            if Seq.isEmpty xlStream.userRange then 
+            if List.isEmpty xlStream.userRange then 
                 if safe index then greed (XLStream.incrXShift stream) (index + 1)
                 else newStream
                     
@@ -305,7 +304,7 @@ let mxManyWithSkip (pSkip: MatrixParser<unit>) maxCount (p:MatrixParser<'a>) =
         let rec greed stream spaces accum =
             let newStream = p stream
             let xlStream = newStream.XLStream
-            if Seq.isEmpty xlStream.userRange then
+            if List.isEmpty xlStream.userRange then
                 let spaces = spaces + 1
                 if spaces <= maxCount then 
                     greed (XLStream.incrXShift stream) spaces accum
@@ -318,14 +317,14 @@ let mxManyWithSkip (pSkip: MatrixParser<unit>) maxCount (p:MatrixParser<'a>) =
                                         s -  maxCount + 1
                                     )
                             }
-                        State = Seq.singleton accum 
+                        State = List.singleton accum 
                     }              
                     
-            else greed (XLStream.incrXShift xlStream) 0 (accum @ Seq.exactlyOne newStream.State)
+            else greed (XLStream.incrXShift xlStream) 0 (accum @ List.exactlyOne newStream.State)
         let newStream = 
             stream 
             |> XLStream.split
-            |> Seq.map (fun stream ->
+            |> List.map (fun stream ->
                 greed stream 0 []
             )
             |> List.ofSeq
@@ -350,14 +349,14 @@ let private rPipe2 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (f: 'a -> 'b ->'
         let left = 
             s1 |> MatrixStream.filter (fun (_,cell1) ->
                 s2.XLStream.userRange 
-                |> Seq.exists (CommonExcelRangeBase.contain cell1)  
+                |> List.exists (CommonExcelRangeBase.contain cell1)  
             )
 
         let right = s2.State             
         { 
             XLStream =            
                 s2.XLStream
-            State = Seq.zip left.State right |> Seq.map (fun (ls,rs) ->
+            State = List.zip left.State right |> List.map (fun (ls,rs) ->
                 f ls rs
             )
         }   
@@ -396,7 +395,7 @@ let r6 (x : MatrixParser<'a>) (y: MatrixParser<'b>) (z: MatrixParser<'c>) (m: Ma
 let mxRowMany (p:MatrixParser<'a>) =
     fun (stream:XLStream) ->
         let singleton s = 
-            { State = s.State |> Seq.map List.singleton 
+            { State = s.State |> List.map List.singleton 
               XLStream = s.XLStream }
         let s = p stream |> singleton
         let mses =
@@ -407,18 +406,18 @@ let mxRowMany (p:MatrixParser<'a>) =
                         { filteredMS with 
                             XLStream = { filteredMS.XLStream with xShifts = ms1.XLStream.xShifts }
                             State = 
-                                Seq.map2 (fun list a -> 
+                                List.map2 (fun list a -> 
                                     list @ [a]) filteredMS.State ms1.State
                         }
                     let newS = fold (ms.XLStream |> XLStream.incrYShift |> p) ms
                     let lifted = 
                         let filteredMS = MatrixStream.filterOfMatrixStream not newS ms
-                        if Seq.isEmpty filteredMS.XLStream.userRange then 
+                        if List.isEmpty filteredMS.XLStream.userRange then 
                             []
                         else [filteredMS]                                                        
                     seq {                   
                         yield! lifted
-                        if Seq.isEmpty newS.XLStream.userRange then 
+                        if List.isEmpty newS.XLStream.userRange then 
                             yield! []
                         else 
                             yield! loop newS  
@@ -432,7 +431,7 @@ let mxRowUntil (safe: int -> bool) (p:MatrixParser<'a>) =
         let rec greed stream index =
             let newStream = p stream
             let xlStream = newStream.XLStream
-            if Seq.isEmpty xlStream.userRange then 
+            if List.isEmpty xlStream.userRange then 
                 if safe index then greed (XLStream.incrYShift stream) (index + 1)   
                 else newStream
                     
@@ -445,7 +444,7 @@ let mxRowManySkipWith pskip maxCount (p:MatrixParser<'a>) =
         let rec greed stream spaces accum =
             let newStream = p stream
             let xlStream = newStream.XLStream
-            if Seq.isEmpty xlStream.userRange then
+            if List.isEmpty xlStream.userRange then
                 let spaces = spaces + 1
                 if spaces <= maxCount then 
                     greed (XLStream.incrYShift stream) spaces accum
@@ -458,17 +457,16 @@ let mxRowManySkipWith pskip maxCount (p:MatrixParser<'a>) =
                                         let length = stream.xShifts.Length
                                         stream.xShifts |> List.take(length - maxCount - 1)
                             }
-                        State = Seq.singleton accum 
+                        State = List.singleton accum 
                     }              
                     
-            else greed (XLStream.incrYShift xlStream) 0 (accum @ Seq.exactlyOne newStream.State)
+            else greed (XLStream.incrYShift xlStream) 0 (accum @ List.exactlyOne newStream.State)
         let newStreams = 
             stream 
             |> XLStream.split
-            |> Seq.map (fun stream ->
+            |> List.map (fun stream ->
                 greed stream 0 []
             )
-            |> List.ofSeq
         let newStream =  newStreams |> MatrixStream.fold
 
         newStream |> MatrixStream.filter(fun (state,range) ->
@@ -486,14 +484,14 @@ let u2 p1 p2 =
     fun (stream: XLStream) ->
         let newStream = p1 stream
         let xlStream = newStream.XLStream
-        if Seq.isEmpty xlStream.userRange then 
+        if List.isEmpty xlStream.userRange then 
             let newStream2 = p2 stream
-            if Seq.isEmpty newStream2.XLStream.userRange then 
+            if List.isEmpty newStream2.XLStream.userRange then 
                 newStream
             else newStream2
         else newStream
 
-let runMatrixParserForRanges (p: MatrixParser<_>) (ranges:seq<CommonExcelRangeBase>) =
+let runMatrixParserForRanges (p: MatrixParser<_>) (ranges:list<CommonExcelRangeBase>) =
     let stream = {userRange=ranges;xShifts=[0]}
     let newStream = p stream
     newStream.State
@@ -502,6 +500,6 @@ let runMatrixParser (p: MatrixParser<_>) (worksheet:ExcelWorksheet) =
     let ranges = 
         worksheet
         |>Excel.getUserRange
-        |>Seq.cache
-        |>Seq.map CommonExcelRangeBase.Core
+        |>List.ofSeq
+        |>List.map CommonExcelRangeBase.Core
     runMatrixParserForRanges p ranges 

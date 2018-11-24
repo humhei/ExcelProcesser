@@ -110,5 +110,4 @@ module Excel=
                     accum @ [range]     
             ) []
             |> sortBy
-            |> List.ofSeq
         r        

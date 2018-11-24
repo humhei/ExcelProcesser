@@ -437,23 +437,93 @@ module CommonExcelRangeBase =
             false
 
 
-    let sortBy (ranges: seq<CommonExcelRangeBase>) =
+    let sortBy (ranges: list<CommonExcelRangeBase>) =
         ranges
-        |> Seq.sortBy (fun s ->
+        |> List.sortBy (fun s ->
             let cell = s |> Seq.head
             let c00,r00 = parseCellAddress cell.Address
             r00,c00
         )
 
-    let distinctRanges (ranges: seq<CommonExcelRangeBase>) =
+    let distinctRanges (ranges: list<CommonExcelRangeBase>) =
         let r = 
-            ranges |> Seq.fold (fun accum range ->
-                let others = ranges |> Seq.filter (fun r -> r.Address <> range.Address)
-                if others |> Seq.exists (contain range) then
+            ranges |> List.fold (fun accum range ->
+                let others = ranges |> List.filter (fun r -> r.Address <> range.Address)
+                if others |> List.exists (contain range) then
                     accum                       
                 else 
                     accum @ [range]     
             ) []
             |> sortBy
-            |> List.ofSeq
         r        
+
+[<RequireQualifiedAccess>]
+module ExcelWorksheet =
+    open OfficeOpenXml
+    open System.IO
+    open FParsec
+    let getWorksheets fileName : ExcelWorksheet seq = 
+        if not (File.Exists fileName) then 
+            failwithf "file%s is not existed" fileName
+        let file = FileInfo(fileName) 
+        let xlPackage = new ExcelPackage(file)
+        xlPackage.Workbook.Worksheets :> IEnumerable<ExcelWorksheet>
+    let getWorksheetByIndex (index:int) fileName = 
+        getWorksheets fileName |> Seq.item index
+
+    let getMaxColNumber (worksheet:ExcelWorksheet) = 
+        worksheet.Dimension.End.Column
+    let getMaxRowNumber (worksheet:ExcelWorksheet) = 
+        worksheet.Dimension.End.Row     
+
+    let getUserRange  worksheet:seq<ExcelRangeBase> = seq {        
+        let maxRow = getMaxRowNumber worksheet
+        let maxCol = getMaxColNumber worksheet
+        for i in 1..maxRow do
+            for j in 1..maxCol do
+                let content = worksheet.Cells.[i,j]
+                yield content:>ExcelRangeBase
+    }
+
+
+#if NET462
+module Worksheet =
+    let getWorksheetByIndex (index:int) (fileName: string) = 
+        let app = ApplicationClass()
+        let workbook = app.Workbooks.Open(fileName)
+        workbook.Worksheets.Item(index + 1) :?> Worksheet
+    let getUserRange (sheet: Worksheet) =
+        let userRange = sheet.UsedRange
+        let maxRow = 
+            let count = Range.rows userRange
+            count + userRange.Row - 1
+        let maxCol = 
+            let count = Range.columns userRange
+            count + userRange.Column
+        seq {
+            for i in 1..maxRow do
+                for j in 1..maxCol do
+                    let content = userRange.Cells.[i,j]
+                    yield content :?> Range
+        }
+#endif
+
+[<RequireQualifiedAccess>]
+type CommonSheet =
+    | Core of ExcelWorksheet
+    #if NET462
+    | Interop of Worksheet
+    #endif
+
+module CommonSheet =
+    let getUserRange commonSheet =
+        match commonSheet with 
+        | CommonSheet.Core sheet -> ExcelWorksheet.getUserRange sheet |> Seq.map CommonExcelRangeBase.Core
+        #if NET462
+        | CommonSheet.Interop sheet -> Worksheet.getUserRange sheet |> Seq.map CommonExcelRangeBase.Interop
+        #endif
+
+
+
+
+

@@ -1,3 +1,5 @@
 EPPlus
 FParsec
 Microsoft.Office.Interop.Excel framework: >= net45
+Microsoft.Office.Excel  framework: >= net45
+
