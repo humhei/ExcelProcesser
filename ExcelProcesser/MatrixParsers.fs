@@ -144,6 +144,11 @@ let runWithResultBack parser (s:string) =
         | ParserResult.Success (x,_,_) -> x
         | ParserResult.Failure _ -> failwithf "failed parse %A" s   
 
+let runWithInputReturnOp parsers input =
+    match run parsers input with 
+    | ParserResult.Success (result,_,_) -> Some input
+    | ParserResult.Failure (error,_,_) -> None
+
 let  (!!) (p: ArrayParser) = 
     fun xlStream ->
         { XLStream = p xlStream; State = xlStream.userRange |> Seq.map ignore }    
@@ -196,6 +201,9 @@ let mxPText s =
 
 let mxOrigin = mxPTextWith (fun s -> Some s)
 let mxSkipOrigin = mxPTextWith (fun s -> Some s) |||> ignore
+
+let mxOriginWith (parser: Parser<_,unit>) =
+    mxPTextWith (fun text -> runWithInputReturnOp parser text)
 
 let  (!^) (p:Parser<'a,unit>) : MatrixParser<'a> = 
     (!^^) p (fun _ -> true)
