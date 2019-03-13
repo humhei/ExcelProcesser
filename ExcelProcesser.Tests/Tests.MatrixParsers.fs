@@ -208,7 +208,7 @@ let MatrixParserTests =
                 ] -> pass()
             | _ -> fail()  
 
-    ftestCase "Parse with mxManyWith operator" <| fun _ ->
+    testCase "Parse with mxManyWith operator" <| fun _ ->
         let p = 
             ["hello";"gogo";"yes"] |> List.map pstring |> choice |> (!^)
         let parser = !^pZip <==> (mxManyWith (fun i -> i = 3) p)
