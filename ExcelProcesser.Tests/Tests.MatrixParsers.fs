@@ -208,6 +208,19 @@ let MatrixParserTests =
                 ] -> pass()
             | _ -> fail()  
 
+    testCase "Parse with mxManyWith operator" <| fun _ ->
+        let p = 
+            ["hello";"gogo";"yes"] |> List.map pstring |> choice |> (!^)
+        let parser = !^pZip <==> (mxManyWith (fun i -> i = 3) p)
+        runMatrixParser parser workSheet
+        |> List.ofSeq
+        |> function 
+            | 
+                [
+                    ("FOTZO-1",4032,84,7453089535063L),["hello";"gogo";"yes"]
+                ] -> pass()
+            | _ -> fail()  
+
 
     testCase "Parse with mxRowMany operator" <| fun _ ->
         let parser = pSize ^<==> mxRowMany pFraction

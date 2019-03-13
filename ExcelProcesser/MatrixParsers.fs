@@ -250,8 +250,9 @@ let c4 =
         xlpipe4 x y z m (fun a b c d->
             a,b,c,d
         )     
-let mxMany (p:MatrixParser<'a>) =
-            
+
+let mxManyWith (safe: int -> bool) (p:MatrixParser<'a>) =
+    
     fun (stream:XLStream) ->
         let singleton s = 
             { State = s.State |> Seq.map List.singleton 
@@ -270,10 +271,14 @@ let mxMany (p:MatrixParser<'a>) =
                         }
                     let newS = collect (ms.XLStream |> XLStream.incrXShift |> p) ms
                     let lifted = 
-                        let filteredMS = MatrixStream.filterOfMatrixStream not newS ms
+                        let filteredMS = 
+                            MatrixStream.filterOfMatrixStream not newS ms 
+                            |> MatrixStream.filter (fun (state,range) ->
+                                safe state.Length
+                            )
                         if Seq.isEmpty filteredMS.XLStream.userRange then 
                             []
-                        else [filteredMS]                                                        
+                        else [filteredMS]                                                       
                     seq {                   
                         yield! lifted
                         if Seq.isEmpty newS.XLStream.userRange then 
@@ -284,6 +289,9 @@ let mxMany (p:MatrixParser<'a>) =
                 yield! loop s
             } |> List.ofSeq |> MatrixStream.foldx
         mses    
+
+let mxMany (p:MatrixParser<'a>) =
+    mxManyWith (fun _ -> true) p
               
 let mxUntil (safe: int -> bool) (p:MatrixParser<'a>) =
     fun stream ->
