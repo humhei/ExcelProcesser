@@ -6,10 +6,6 @@
         "**/.DS_Store": true,
         "**/.vs": true,
         "**/bin": true,
-        "build.fsx.lock": true,
-        "build.proj": true,
-        "fake.cmd": true,
-        "fake.sh": true,
         // "**/obj": true,
     },
     "search.exclude": {
