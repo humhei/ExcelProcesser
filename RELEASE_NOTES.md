@@ -1,6 +1,8 @@
 ﻿# Release Notes
 
-## 0.3.10 - tbd
+## 0.3.11-alpha - tbd
+
+## 0.3.10 - 2019-04-18
 * Added mxManyWith
 
 ## 0.3.9 - 2019-03-13
