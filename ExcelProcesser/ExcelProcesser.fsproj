@@ -13,5 +13,10 @@
     <Compile Include="MatrixParsers.fs" />
     <Compile Include="SheetParsers.fs" />
   </ItemGroup>
-  <Import Project="..\.paket\Paket.Restore.targets" />
+  <ItemGroup>
+    <PackageReference Include="FParsec" Version="1.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="EPPlus" Version="4.5.3.1" />
+  </ItemGroup>
 </Project>

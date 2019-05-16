@@ -6,6 +6,8 @@ open OfficeOpenXml
 open System.Text.RegularExpressions
 open OfficeOpenXml.Style
 type CellParser=ExcelRangeBase -> bool
+
+
 let getColor (color:ExcelColor)=
     if color.Indexed >0 then color.LookupColor()
     else "#"+color.Rgb
@@ -27,6 +29,9 @@ let pText (f: string -> bool) =
     fun (cell:ExcelRangeBase)->
         f cell.Text
 
+let pStyleName (styleName: string):CellParser = 
+    fun (cell: ExcelRangeBase) ->
+        cell.StyleName = styleName
 
 let pRegex pattern:CellParser =
     pText (fun text ->

@@ -18,5 +18,8 @@
     <Compile Include="Tests.MatrixParsers.fs" />
     <Compile Include="Tests.Runner.fs" />
   </ItemGroup>
-  <Import Project="..\.paket\Paket.Restore.targets" />
+  <ItemGroup>
+    <PackageReference Include="Expecto" Version="8.10.1" />
+    <PackageReference Include="Fake.IO.FileSystem" Version="5.13.7" />
+  </ItemGroup>
 </Project>

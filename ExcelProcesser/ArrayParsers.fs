@@ -104,7 +104,6 @@ let (!@) (p:CellParser):ArrayParser=
                 userRange=c }   
 
 
-
 let (+>>) (p1:ArrayParser) (p2:ArrayParser):ArrayParser=
     let p2=fun (stream:XLStream)->
         let shift=stream.xShifts|>List.mapTail(fun c->c+1)

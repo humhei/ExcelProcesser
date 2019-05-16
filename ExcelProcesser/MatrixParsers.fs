@@ -159,6 +159,9 @@ let mxXPlaceHolder num =
 let mxYPlaceHolder num =
     !! (yPlaceholder num)
 
+let mxPCellParser (cellParser: CellParser) =
+    !! (!@ cellParser)
+
 let  (!^^) (p:Parser<'a,unit>) f : MatrixParser<'a> = 
     let ap = !@(pFParsecWith p f)
     fun xlStream ->
@@ -198,6 +201,7 @@ let mxPText s =
             else None
         )
     p |||> ignore
+
 
 let mxOrigin = mxPTextWith (fun s -> Some s)
 let mxSkipOrigin = mxPTextWith (fun s -> Some s) |||> ignore
