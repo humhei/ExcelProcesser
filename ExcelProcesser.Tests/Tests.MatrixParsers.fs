@@ -8,6 +8,7 @@ open FParsec
 open Tests.Types
 open System.IO
 open MatrixParsers
+
 let pass() = Expect.isTrue true "passed"
 let fail() = Expect.isTrue false "failed"
 let workSheet = XLPath.matrixTest |> Excel.getWorksheetByIndex 0
@@ -42,14 +43,14 @@ let pFraction ms =
 let MatrixParserTests =
   testList "MatrixParserTests" [
     testCase "Parse zips" <| fun _ ->
-        runMatrixParser (!^pZip) workSheet
+        runMatrixParserBack (!^pZip) workSheet
         |> List.ofSeq
         |> List.head
         |> function 
             | ("FOTZO-1",4032,84,7453089535063L) -> pass()
             | _ -> fail()
     testCase "Parse sizes" <| fun _ ->
-        runMatrixParser pSize workSheet
+        runMatrixParserBack pSize workSheet
         |> List.ofSeq
         |> function 
             | [ [35;36;37;38;39;40]
@@ -58,14 +59,14 @@ let MatrixParserTests =
             | _ -> fail()
     testCase "Parse sizes with place holder" <| fun _ ->
         let ph = !! (xPlaceholder 1)
-        runMatrixParser (ph <==> pSize) workSheet
+        runMatrixParserBack (ph <==> pSize) workSheet
         |> List.ofSeq
         |> List.head
         |> function 
             | _,[35;36;37;38;39;40] -> pass()
             | _ -> fail()    
     testCase "Parse fraction" <| fun _ ->
-        runMatrixParser pFraction workSheet
+        runMatrixParserBack pFraction workSheet
         |> List.ofSeq
         |> List.head
         |> function 
@@ -74,7 +75,7 @@ let MatrixParserTests =
     testCase "Parse in sequence with tuple return" <| fun _ ->
         let p2 = !^(pstring "hello")
         let p3 = !^(pstring "gogo")
-        runMatrixParser (!^pZip <==> p2 <==> p3) workSheet
+        runMatrixParserBack (!^pZip <==> p2 <==> p3) workSheet
         |> List.ofSeq
         |> List.head
         |> function 
@@ -84,28 +85,30 @@ let MatrixParserTests =
     testCase "Parse in sequence with pipe3" <| fun _ ->
         let p2 = !^(pstring "hello")
         let p3 = !^(pstring "gogo")
-        runMatrixParser (c3 !^pZip p2 p3) workSheet
+        runMatrixParserBack (c3 !^pZip p2 p3) workSheet
         |> List.ofSeq
         |> List.head
         |> function 
             | ("FOTZO-1",4032,84,7453089535063L),"hello","gogo" -> pass()
             | _ -> fail()   
 
+
     testCase "Parse in sequence with pipe4" <| fun _ ->
         let p2 = !^(pstring "hello")
         let p3 = !^(pstring "gogo")
         let p4 = !^(pstring "yes")
-        runMatrixParser (c4 !^pZip p2 p3 p4) workSheet
+        runMatrixParserBack (c4 !^pZip p2 p3 p4) workSheet
         |> List.ofSeq
         |> List.head
         |> function 
             | ("FOTZO-1",4032,84,7453089535063L),"hello","gogo","yes" -> pass()
             | _ -> fail()   
+ 
 
     testCase "Parse in two rows with tuple return" <| fun _ ->
         let p1 = !^(pstring "hello")
         let p2 = pSize
-        runMatrixParser (p1^<==>p2) workSheet
+        runMatrixParserBack (p1^<==>p2) workSheet
         |> List.ofSeq
         |> List.head
         |> function 
@@ -116,13 +119,36 @@ let MatrixParserTests =
         let p1 = !^(pstring "hello")
         let p2 = pSize
         let p3 = pFraction
-        runMatrixParser (r3 p1 p2 p3) workSheet
+        runMatrixParserBack (r3 p1 p2 p3) workSheet
         |> List.ofSeq
         |> List.head
         |> function 
             | "hello",[35;36;37;38;39;40],[1;2;3;3;2;1] -> pass()
             | _ -> fail()  
           
+
+    ftestCase "Parse in cross area1" <| fun _ ->
+        let p2 = 
+            r2 (!^(pstring "B")) (!^(pstring "C"))
+        let p3 = !^(pstring "D")
+
+
+        runMatrixParserBack (c2 p2 p3) workSheet
+        |> function 
+            | [("B","C"),"D"] -> pass()
+            | _ -> fail() 
+
+    testCase "Parse in cross area" <| fun _ ->
+        let p1 = !^(pstring "A")
+        let p2 = 
+            r2 (!^(pstring "B")) (!^(pstring "C"))
+        let p3 = !^(pstring "D")
+
+
+        runMatrixParserBack (c3 p1 p2 p3) workSheet
+        |> function 
+            | ["A",("B","C"),"D"] -> pass()
+            | _ -> fail()  
 
     testCase "Parse int two rows has different length" <| fun _ ->
         let p00 = !^pZip
@@ -132,7 +158,7 @@ let MatrixParserTests =
         let p12 = pSize
         let p0 = c3 p00 p01 p02
         let p1 = c2 p10 p12
-        runMatrixParser (r2 p0 p1) workSheet
+        runMatrixParserBack (r2 p0 p1) workSheet
         |> List.ofSeq
         |> List.head
         |> function 
@@ -147,7 +173,7 @@ let MatrixParserTests =
         let p = 
             ["hello";"gogo";"yes"] |> List.map pstring |> choice |> pFParsec |> (!@)
         let parser = !^pZip <==> !! (xlMany p)
-        runMatrixParser parser workSheet
+        runMatrixParserBack parser workSheet
         |> List.ofSeq
         |> function 
             | 
@@ -162,7 +188,7 @@ let MatrixParserTests =
             c2 
                 (!^ (pstring "Begin"))
                 (mxUntil (fun _ -> true) !^ (pstring "XUntil"))
-        runMatrixParser parser workSheet
+        runMatrixParserBack parser workSheet
         |> List.ofSeq
         |> function 
             | [("Begin","XUntil")] -> pass()
@@ -173,7 +199,7 @@ let MatrixParserTests =
             c2
                 (!^ (pstring "黑色"))
                 (mxManySkipSpace 2  (mxOrigin))
-        runMatrixParser parser workSheet
+        runMatrixParserBack parser workSheet
         |> Seq.head
         |> function 
             | _,["Begin";"XUntil";"Hello"] -> pass()
@@ -184,7 +210,7 @@ let MatrixParserTests =
         let p = 
             ["hello";"gogo";"yes"] |> List.map pstring |> choice
         let parser = !^p ^<==> !! (rowMany (!@(pFParsec pintSepBySpace)))
-        runMatrixParser parser workSheet
+        runMatrixParserBack parser workSheet
         |> List.ofSeq
         |> function 
             | 
@@ -198,7 +224,7 @@ let MatrixParserTests =
         let p = 
             ["hello";"gogo";"yes"] |> List.map pstring |> choice |> (!^)
         let parser = !^pZip <==> (mxMany p)
-        runMatrixParser parser workSheet
+        runMatrixParserBack parser workSheet
         |> List.ofSeq
         |> function 
             | 
@@ -212,7 +238,7 @@ let MatrixParserTests =
         let p = 
             ["hello";"gogo";"yes"] |> List.map pstring |> choice |> (!^)
         let parser = !^pZip <==> (mxManyWith (fun i -> i = 3) p)
-        runMatrixParser parser workSheet
+        runMatrixParserBack parser workSheet
         |> List.ofSeq
         |> function 
             | 
@@ -224,7 +250,7 @@ let MatrixParserTests =
 
     testCase "Parse with mxRowMany operator" <| fun _ ->
         let parser = pSize ^<==> mxRowMany pFraction
-        runMatrixParser parser workSheet
+        runMatrixParserBack parser workSheet
         |> List.ofSeq
         |> List.head
         |> function 
@@ -238,7 +264,7 @@ let MatrixParserTests =
             r2 
                 (!^ (pstring "Begin"))
                 (mxRowUntil (fun _ -> true) !^(pstring "YUntil"))
-        runMatrixParser parser workSheet
+        runMatrixParserBack parser workSheet
         |> List.ofSeq
         |> function 
             | [("Begin","YUntil")] -> pass()
@@ -249,7 +275,7 @@ let MatrixParserTests =
             r2
                 (!^ (pstring "黑色"))
                 (mxRowManySkipSpace 2  (mxOrigin))
-        runMatrixParser parser workSheet
+        runMatrixParserBack parser workSheet
         |> Seq.head
         |> function 
             | _,["Begin";"YUntil";"黑色";"Begin"] -> pass()

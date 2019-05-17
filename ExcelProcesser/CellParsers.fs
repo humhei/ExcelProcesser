@@ -5,7 +5,11 @@ open System.Drawing
 open OfficeOpenXml
 open System.Text.RegularExpressions
 open OfficeOpenXml.Style
+open System
+
 type CellParser=ExcelRangeBase -> bool
+
+
 
 
 let getColor (color:ExcelColor)=
@@ -38,6 +42,12 @@ let pRegex pattern:CellParser =
         let m=Regex.Match(text, pattern)
         m.Success
     )
+
+let pFormula (firstFormula: Formula) =
+    fun (cell:ExcelRangeBase)->
+        let formula = cell.Formula
+        //if cell.Address = "B13" then printf ""
+        formula.StartsWith (Enum.GetName(typeof<Formula>,firstFormula) + "(")
 
 let pFParsec (p: Parser<_,_>) =
     fun (cell:ExcelRangeBase) ->

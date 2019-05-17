@@ -7,6 +7,9 @@
     <ProjectReference Include="..\ExcelProcesser\ExcelProcesser.fsproj" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="resources\math.xlsx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="resources/matrixTest.xlsx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
@@ -16,6 +19,7 @@
     <Compile Include="Tests.Types.fs" />
     <Compile Include="Tests.ArrayParsers.fs" />
     <Compile Include="Tests.MatrixParsers.fs" />
+    <Compile Include="Tests.Math.fs" />
     <Compile Include="Tests.Runner.fs" />
   </ItemGroup>
   <ItemGroup>

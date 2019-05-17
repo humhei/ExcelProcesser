@@ -5,7 +5,7 @@ type SheetParser<'a> = ExcelWorksheet -> 'a
     
 let (>=>) (p : MatrixParser<'a>) (f: 'a -> 'b) =
     fun sheet ->
-        runMatrixParser p sheet |> Seq.map f
+        runMatrixParser sheet p |> Seq.map f
 
 let runSheetParser sheet (p: SheetParser<'a>) =
     p sheet

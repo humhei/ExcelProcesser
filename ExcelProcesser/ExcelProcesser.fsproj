@@ -6,17 +6,21 @@
 
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Logger.fs" />
     <Compile Include="Linq.fs" />
     <Compile Include="Excel.fs" />
     <Compile Include="CellParsers.fs" />
     <Compile Include="ArrayParsers.fs" />
     <Compile Include="MatrixParsers.fs" />
+    <Compile Include="MathEx.fs" />
     <Compile Include="SheetParsers.fs" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Fake.Core.Trace" Version="5.13.7" />
     <PackageReference Include="FParsec" Version="1.0.3" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="EPPlus" Version="4.5.3.1" />
+    <PackageReference Include="NLog" Version="4.6.3" />
   </ItemGroup>
 </Project>

@@ -1,6 +1,7 @@
 ﻿# Release Notes
 
-## 0.3.11-alpha - tbd
+## 0.3.11-alpha.2 - tbd
+* Added mxPCellParser
 
 ## 0.3.10 - 2019-04-18
 * Added mxManyWith

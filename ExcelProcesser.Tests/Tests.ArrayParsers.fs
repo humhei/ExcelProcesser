@@ -11,6 +11,21 @@ let fail() = Expect.isTrue false "failed"
 let workSheet = XLPath.test |> Excel.getWorksheetByIndex 0
 let ArrayParserTests =
   testList "ParserTests" [
+
+    testCase "Parse formula" <| fun _ -> 
+        let parser:ArrayParser=
+            //match cells beginning with GD
+            !@(pFormula Formula.SUM)
+        let m = workSheet.Cells.["J15"]
+        let reply=
+            workSheet
+            |>runArrayParser parser
+            |>fun c->c.userRange
+            |>List.map(fun c->c.Address)
+        match reply with
+          |["J15"]->pass()
+          |_->fail()
+
     testCase "Parse cell Test" <| fun _ -> 
         let parser:ArrayParser=
             //match cells beginning with GD
@@ -205,48 +220,48 @@ let ArrayParserTests =
           |["A2:A4";"B6:B7"]->pass()
           |_->fail() 
 
-    testCase "row many operator complex" <| fun _ -> 
-        let parser:ArrayParser=
-            let p =
-                many1 (pchar ' ') |> sepEndBy1 pint32
-            let parser = !@pFParsec(p) |> rowMany
-            parser
+    //testCase "row many operator complex" <| fun _ -> 
+    //    let parser:ArrayParser=
+    //        let p =
+    //            many1 (pchar ' ') |> sepEndBy1 pint32
+    //        let parser = !@pFParsec(p) |> rowMany
+    //        parser
                    
-        let reply=
-            workSheet
-            |> runArrayParser parser
-            |>fun c->c.userRange
-            |>Seq.map(fun c->c.Address)
-            |>List.ofSeq
-            |>List.filter (fun ad ->
-                ad.Contains ":"
-            )
-        match reply with
-          |["F2:F4";"F11:F13"]->pass()
-          |_->fail() 
+    //    let reply=
+    //        workSheet
+    //        |> runArrayParser parser
+    //        |>fun c->c.userRange
+    //        |>Seq.map(fun c->c.Address)
+    //        |>List.ofSeq
+    //        |>List.filter (fun ad ->
+    //            ad.Contains ":"
+    //        )
+    //    match reply with
+    //      |["F2:F4";"F11:F13"]->pass()
+    //      |_->fail() 
 
-    testCase "yUntil in row Test" <| fun _ -> 
-        let parser:ArrayParser=
-           !@ (pText ((=) "Begin")) ^+>> yUntil (fun _ -> true) !@ (pText ((=) "Until"))
+    //testCase "yUntil in row Test" <| fun _ -> 
+    //    let parser:ArrayParser=
+    //       !@ (pText ((=) "Begin")) ^+>> yUntil (fun _ -> true) !@ (pText ((=) "Until"))
        
-        let shift= workSheet
-                       |>runArrayParser parser
-                       |>fun c->c.xShifts
+    //    let shift= workSheet
+    //                   |>runArrayParser parser
+    //                   |>fun c->c.xShifts
        
-        match shift with
-        | [0;0;0;0;0;0;0] ->pass()
-        |_->fail()   
+    //    match shift with
+    //    | [0;0;0;0;0;0;0] ->pass()
+    //    |_->fail()   
 
-    testCase "complex yUntil in row Test" <| fun _ -> 
-        let parser:ArrayParser=
-           !@ (pText ((=) "Begin")) +>> !@ (pText ((=) "Hello"))
-           ^+>> yUntil (fun _ -> true) !@ (pText ((=) "Until"))
+    //testCase "complex yUntil in row Test" <| fun _ -> 
+    //    let parser:ArrayParser=
+    //       !@ (pText ((=) "Begin")) +>> !@ (pText ((=) "Hello"))
+    //       ^+>> yUntil (fun _ -> true) !@ (pText ((=) "Until"))
        
-        let shift= workSheet
-                       |>runArrayParser parser
-                       |>fun c->c.xShifts
+    //    let shift= workSheet
+    //                   |>runArrayParser parser
+    //                   |>fun c->c.xShifts
        
-        match shift with
-        | [1;0;0;0;0;0;0] ->pass()
-        |_->fail()   
+    //    match shift with
+    //    | [1;0;0;0;0;0;0] ->pass()
+    //    |_->fail()   
   ]

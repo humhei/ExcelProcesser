@@ -3,6 +3,11 @@ namespace ExcelProcess
 //https://github.com/igorkulman/ExcelPackageF
 open OfficeOpenXml.FormulaParsing.Excel.Functions.RefAndLookup
 open System.Collections.Generic
+
+type Formula =
+    | SUM = 0
+    
+
 [<RequireQualifiedAccess>]
 module Address =
     let isCell (add:string) =
@@ -46,6 +51,7 @@ module Excel=
                 let content = worksheet.Cells.[i,j].Value
                 yield content
     }
+
     let getUserRange  worksheet:seq<ExcelRangeBase> = seq {
         let maxRow = getMaxRowNumber worksheet
         let maxCol = getMaxColNumber worksheet
@@ -55,6 +61,10 @@ module Excel=
                 yield content:>ExcelRangeBase
 
     }
+
+    let asRanges (range: ExcelRangeBase) =
+        range :> seq<ExcelRangeBase>
+        |> List.ofSeq
 
     let translate address (xOffset:int) (yOffset:int) =
         ExcelCellBase.TranslateFromR1C1(ExcelCellBase.TranslateToR1C1(address, -yOffset, -xOffset), 0, 0)
