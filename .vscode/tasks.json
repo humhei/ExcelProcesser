@@ -6,8 +6,8 @@
             "command": "dotnet",
             "group": "build",
             "args": [
-                "msbuild",
-                "ExcelProcesser.Tests/ExcelProcesser.Tests.fsproj"
+                "build",
+                "tests/ExcelProcesser.Tests/ExcelProcesser.Tests.fsproj"
             ],
             "presentation": {
                 "reveal": "silent"

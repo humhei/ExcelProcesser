@@ -7,17 +7,11 @@
             "request": "launch",
             "preLaunchTask": "Build Tests",
             "type": "coreclr",            
-            "program": "${workspaceRoot}/ExcelProcesser.Tests/bin/Debug/netcoreapp2.1/ExcelProcesser.Tests.dll",
+            "program": "${workspaceRoot}/src/ExcelProcesser.Tests/bin/Debug/netcoreapp2.2/ExcelProcesser.Tests.dll",
             "args": [],
             "cwd": "${workspaceRoot}/ExcelProcesser.Tests",
             "stopAtEntry": false,
             "console": "internalConsole"
         },
-        {
-            "name": ".NET Core Attach",
-            "type": "coreclr",
-            "request": "attach",
-            "processId": "${command:pickProcess}"
-        }
     ]
 }
