@@ -51,14 +51,9 @@ let pFParsec (p : Parser<_, _>) =
     fun (cell : ExcelRangeBase) ->
         let text = cell.Text
         match run p text with
-        | ParserResult.Success _ -> true
-        | _ -> false
+        | ParserResult.Success (result, _, _) -> Some result
+        | _ -> None
 
-let pFParsecWithMappingResult (p : Parser<_, _>) mapping =
-    fun (cell : ExcelRangeBase) ->
-        let text = cell.Text
-        match run p text with
-        | ParserResult.Success(r, _, _) -> mapping r
-        | _ -> false
+let pSpace range = pTextf (fun text -> text.Trim() = "") range
 
 let pAny : CellParser = fun _ -> true

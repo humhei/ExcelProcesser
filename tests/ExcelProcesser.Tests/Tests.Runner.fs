@@ -15,4 +15,5 @@ let liteDbTests =
     ]
 
 [<EntryPoint>]
-let main argv = runTests testConfig liteDbTests
+let main argv = 
+    runTests testConfig liteDbTests
