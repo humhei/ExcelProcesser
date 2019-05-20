@@ -1,4 +1,4 @@
-﻿﻿# Release Notes
+﻿# Release Notes
 
 ## 1.0 - tbd
 * REFACTOR (Simplify logic; Less codes)
