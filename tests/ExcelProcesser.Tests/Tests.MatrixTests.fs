@@ -1,17 +1,21 @@
-module Tests.MyTests
+module Tests.MatrixTests
 open Expecto
 open ExcelProcesser
 open Tests.Types
 open MatrixParsers
 open FParsec
+open OfficeOpenXml
+open System.IO
 
 let pass() = Expect.isTrue true "passed"
 let fail() = Expect.isTrue false "failed"
 
-let _, worksheet = excelPackageAndWorksheet 0 XLPath.matrix
+let excelPackage = new ExcelPackage(FileInfo(XLPath.testData))
 
-let MyTests =
-  testList "MyTests" [
+let worksheet = excelPackage.Workbook.Worksheets.["Matrix"]
+
+let matrixTests =
+  testList "MatrixTests" [
     testCase "mxText" <| fun _ -> 
         let results = runMatrixParser worksheet (mxText "mxTextA")
         match results with 
@@ -78,7 +82,8 @@ let MyTests =
                 (c3 
                     (mxText "Cross_1A") 
                     (r3 (mxText "Cross_1B") (mxText "Cross_1C") (mxText "Cross_1D"))
-                    (mxText "Cross_1E"))
+                    (mxText "Cross_1E")
+                )
         match results with 
         | [("Cross_1A",("Cross_1B", "Cross_1C", "Cross_1D"),"Cross_1E")] -> pass()
         | _ -> fail()
@@ -92,8 +97,8 @@ let MyTests =
                     (r3 
                         (mxText "Cross_2B") 
                         (mxText "Cross_2C") 
-                        (c2 (mxText "Cross_2D") 
-                        (mxText "Cross_2E")))
+                        (c2 (mxText "Cross_2D") (mxText "Cross_2E"))
+                    )
                 )
         match results with 
         | [("Cross_2A",("Cross_2B", "Cross_2C", ("Cross_2D","Cross_2E")))] -> pass()
@@ -121,18 +126,19 @@ let MyTests =
         let results = 
             runMatrixParser 
                 worksheet 
-                (mxManySkipCol mxSpace 1 (mxTextf(fun text -> text.StartsWith "cm_skip")))
+                (mxColManySkip mxSpace 1 (mxTextf(fun text -> text.StartsWith "cm_skip")))
         match results with 
-        | ["cm_skip_1"; "cm_skip_2"; "cm_skip_3" ] :: _  -> pass()
+        | ["cm_skip_1"; "cm_skip_2"; "cm_skip_3"] :: _  -> pass()
         | _ -> fail()
 
     testCase "mx until" <| fun _ -> 
         let results = 
             runMatrixParser 
                 worksheet 
-                (c2 (mxText "mx_until1") (mxUntil None (mxText "mx_until4")) )
+                (c2 (mxText "mx_until1") (mxUntilA50 (mxText "mx_until4")))
+
         match results with 
-        | ("mx_until1", "mx_until4") :: _  -> pass()
+        | ("mx_until1", ("mx_until4")) :: _  -> pass()
         | _ -> fail()
 
   ]

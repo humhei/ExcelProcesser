@@ -8,7 +8,6 @@ type Direction =
     | Horizontal = 0
     | Vertical = 1
 
-
 type Coordinate =
     { X: int 
       Y: int }
@@ -20,6 +19,7 @@ module Coordinate =
 
 [<RequireQualifiedAccess>]
 type RelativeShift =
+    | Skip
     | Start
     | Vertical of int
     | Horizontal of int
@@ -27,6 +27,7 @@ type RelativeShift =
 [<RequireQualifiedAccess>]
 module RelativeShift =
     let getNumber = function 
+        | RelativeShift.Skip -> 0
         | RelativeShift.Start -> 1
         | RelativeShift.Horizontal i -> i
         | RelativeShift.Vertical i -> i
@@ -34,6 +35,8 @@ module RelativeShift =
 
     let plus direction shift1 shift2 =
         match shift1, shift2 with 
+        | RelativeShift.Skip, _ -> shift2
+        | _, RelativeShift.Skip -> shift1
         | RelativeShift.Start, RelativeShift.Start -> 
             match direction with 
             | Direction.Horizontal -> RelativeShift.Horizontal 2
@@ -99,46 +102,50 @@ module Shift =
             | h :: t ->
                 getCoordinate h
 
-    let rec applyDirection (archivement: RelativeShift) (direction: Direction) shift = 
-        let archivementCount = RelativeShift.getNumber archivement
+    let rec applyDirection (relativeShift: RelativeShift) (direction: Direction) shift = 
+        
+        match relativeShift with 
+        | RelativeShift.Skip -> shift
+        | _ ->
+            let relativeShiftNumber = RelativeShift.getNumber relativeShift
 
-        match shift with
-        | Start ->
-            match direction with 
-            | Direction.Vertical ->
-                Vertical (Coordinate.origin, 1)
+            match shift with
+            | Start ->
+                match direction with 
+                | Direction.Vertical ->
+                    Vertical (Coordinate.origin, 1)
 
-            | Direction.Horizontal ->
-                Horizontal (Coordinate.origin, 1)
+                | Direction.Horizontal ->
+                    Horizontal (Coordinate.origin, 1)
 
-            | _ -> failwith "Invalid token"
+                | _ -> failwith "Invalid token"
 
-        | Vertical (coordinate, i) -> 
-            match direction with 
-            | Direction.Vertical ->
-                Vertical (coordinate, i + 1)
+            | Vertical (coordinate, i) -> 
+                match direction with 
+                | Direction.Vertical ->
+                    Vertical (coordinate, i + 1)
 
-            | Direction.Horizontal ->
-                Compose([Horizontal({ coordinate with Y = coordinate.Y + i - archivementCount + 1 }, 1); Vertical(coordinate, i)])
+                | Direction.Horizontal ->
+                    Compose([Horizontal({ coordinate with Y = coordinate.Y + i - relativeShiftNumber + 1 }, 1); Vertical(coordinate, i)])
 
-            | _ -> failwith "Invalid token"
+                | _ -> failwith "Invalid token"
 
-        | Horizontal (coordinate, i) ->
-            match direction with 
-            | Direction.Vertical ->
-                Compose([Vertical({ coordinate with X = coordinate.X + i - archivementCount + 1}, 1); Horizontal(coordinate, i)])
+            | Horizontal (coordinate, i) ->
+                match direction with 
+                | Direction.Vertical ->
+                    Compose([Vertical({ coordinate with X = coordinate.X + i - relativeShiftNumber + 1}, 1); Horizontal(coordinate, i)])
 
-            | Direction.Horizontal ->
-                Horizontal (coordinate, i + 1)
+                | Direction.Horizontal ->
+                    Horizontal (coordinate, i + 1)
 
-            | _ -> failwith "Invalid token"
+                | _ -> failwith "Invalid token"
 
 
-        | Compose (shifts) ->
-            match shifts with
-            | [] -> failwith "compose shifts cannot be empty after start"
-            | h :: t ->
-                Compose (applyDirection archivement direction h :: t)
+            | Compose (shifts) ->
+                match shifts with
+                | [] -> failwith "compose shifts cannot be empty after start"
+                | h :: t ->
+                    Compose (applyDirection relativeShift direction h :: t)
 
 
 [<RequireQualifiedAccess>]
@@ -219,6 +226,12 @@ module MatrixParser =
                 f outputStream
             | None -> None
 
+    let filterOutputStreamByResultValue f p =
+        mapOutputStream (fun outputStream ->
+            if f outputStream.Result.Value then Some outputStream
+            else None
+        ) p
+
 let mxCellParserOp (cellParser: ExcelRangeBase -> 'result option) =
     fun (stream: InputMatrixStream) ->
         let offsetedRange = ExcelRangeBase.offset stream.Shift stream.Range
@@ -253,6 +266,8 @@ let mxTextf f =
 
 let mxSpace inputStream = mxCellParser pSpace ignore inputStream
 
+let mxStyleName styleName = mxCellParser (pStyleName styleName) ExcelRangeBase.getText
+
 let mxAny inputStream = 
     mxCellParser pAny ignore inputStream
 
@@ -274,6 +289,13 @@ let mxOR (p1: MatrixParser<'result1>) (p2: MatrixParser<'result2>) =
         | Some outputStream ->
             Some outputStream
         | None -> p2 inputStream
+
+
+let (<!>) (p1: MatrixParser<'result>) (p2: MatrixParser<'exclude>) = 
+    fun inputStream ->
+        match p2 inputStream with 
+        | Some _ -> None
+        | None -> p1 inputStream
 
 
 let pipe2 (direction: Direction) (p1: MatrixParser<'result1>) (p2: MatrixParser<'result2>) f =
@@ -304,6 +326,12 @@ let pipe3 direction p1 p2 p3 f =
         f (a, b, c)
     )
 
+let private atLeastOne (p: MatrixParser<'a list>) =
+    p
+    |> MatrixParser.mapOutputStream (fun outputStream ->
+        if outputStream.Result.Value.IsEmpty then None
+        else Some outputStream
+    )
 
 let private mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result>) = 
     
@@ -324,16 +352,16 @@ let private mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser
                         loop (MatrixStream.Output outputStream) (outputStream :: accum) 
                     | None -> accum
 
-                | MatrixStream.Output outputStream ->
-                    let inputStream = (OutputMatrixStream.applyDirectionToShift direction outputStream).AsInputStream
+                | MatrixStream.Output outputStream1 ->
+                    let inputStream = (OutputMatrixStream.applyDirectionToShift direction outputStream1).AsInputStream
 
                     match p inputStream with 
-                    | Some outputStream ->
+                    | Some outputStream2 ->
                         let newOutputStream = 
                             OutputMatrixStream.mapResult (fun result2 -> 
-                                { RelativeShift = RelativeShift.plus direction outputStream.Result.RelativeShift result2.RelativeShift
+                                { RelativeShift = RelativeShift.plus direction outputStream1.Result.RelativeShift result2.RelativeShift
                                   Value = result2.Value }
-                            ) outputStream
+                            ) outputStream2
                         loop (MatrixStream.Output newOutputStream) (newOutputStream :: accum)
 
                     | None -> accum
@@ -360,21 +388,23 @@ let private mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser
             { Range = inputStream.Range
               Shift = inputStream.Shift
               Result = 
-                { RelativeShift = RelativeShift.Start
+                { RelativeShift = RelativeShift.Skip
                   Value = []
                 }
             }
             |> Some
 
+let mxMany1WithMaxCount direction (maxCount: int option) (p: MatrixParser<'result>) =
+    mxManyWithMaxCount direction maxCount p
+    |> atLeastOne
+
 let mxMany direction p = mxManyWithMaxCount direction None p
 
-let mxMany1 direction p =
-        mxMany direction p
-        |> MatrixParser.mapOutputStream (fun outputStream ->
-            if outputStream.Result.Value.IsEmpty then None
-            else Some outputStream
-        )
 
+
+let mxMany1 direction p =
+    mxMany direction p
+    |> atLeastOne
 
 
 let mxManySkip direction pSkip maxSkipCount p =
@@ -393,7 +423,13 @@ let mxManySkip direction pSkip maxSkipCount p =
         |> List.concat
     )
 
-let mxUntil maxCount (p: MatrixParser<'result>) =
+let mxMany1Skip direction pSkip maxSkipCount p =
+    mxManySkip direction pSkip maxSkipCount p
+    |> atLeastOne
+
+
+
+let inDirection (p: Direction -> MatrixParser<'result>) =
     fun (inputStream: InputMatrixStream) ->
         let direction =
             let rec loop shift = 
@@ -407,54 +443,36 @@ let mxUntil maxCount (p: MatrixParser<'result>) =
                         loop h
                     | _ -> failwith "compose shifts cannot be empty after start"
             loop inputStream.Shift
+        p direction inputStream
 
-        let rec greed accum stream =
-            let isReachMaxCount = 
-                match maxCount with 
-                | Some maxCount -> accum > maxCount
-                | None -> false
+let mxUntil direction maxCount pPrevious (pLast: MatrixParser<'result>) =
 
-            if isReachMaxCount then None
-            else
-                match stream with 
-                | MatrixStream.Input inputStream ->
-                    match p inputStream with 
-                    | Some outputStream ->
-                        Some outputStream
-                    | None ->
-                        match mxAny inputStream with 
-                        | Some outputStream ->
-                            greed (accum + 1) (MatrixStream.Output outputStream) 
-                        /// mxAny match everything
-                        | None -> failwith "Invalid token"
+    pipe2 direction (mxManyWithMaxCount direction maxCount (pPrevious <!> pLast)) pLast id
+    
+let mxUntilIND maxCount pPrevious (pLast: MatrixParser<'result>) =
+    inDirection (fun direction ->
+        mxUntil direction maxCount pPrevious (pLast: MatrixParser<'result>)
+    )
 
-                | MatrixStream.Output outputStream ->
-                    let inputStream = (OutputMatrixStream.applyDirectionToShift direction outputStream).AsInputStream
+let mxUntilA maxCount (p: MatrixParser<'result>) =
+    inDirection (fun direction ->
+        mxUntil direction maxCount mxAny p
+    )
+    |||> snd
 
-                    match p inputStream with 
-                    | Some stream -> Some stream
+let mxUntilIND50 pPrevious (pLast: MatrixParser<'result>) = mxUntilIND (Some 50) pPrevious (pLast: MatrixParser<'result>)
 
-                    | None -> 
-                        match mxAny inputStream with 
-                        | Some outputStream ->
-                            let newOutputStream = 
-                                OutputMatrixStream.mapResult (fun result2 -> 
-                                    { RelativeShift = RelativeShift.plus direction outputStream.Result.RelativeShift result2.RelativeShift
-                                      Value = result2.Value }
-                                ) outputStream
-                            greed (accum + 1) (MatrixStream.Output newOutputStream)
-                        /// mxAny match everything
-                        | None -> failwith "Invalid token"
+let mxUntilA50 (p: MatrixParser<'result>) = mxUntilA (Some 50) p
 
-        greed 0 (MatrixStream.Input inputStream)
+let mxUntilA10 (p: MatrixParser<'result>) = mxUntilA (Some 10) p
 
-
+let mxUntilA5 (p: MatrixParser<'result>) = mxUntilA (Some 5) p 
 
 let cm p = mxMany1 Direction.Horizontal p
 
-let mxManySkipCol pSkip maxSkipCount p = mxManySkip Direction.Horizontal pSkip maxSkipCount p
+let mxColManySkip pSkip maxSkipCount p = mxManySkip Direction.Horizontal pSkip maxSkipCount p
 
-let mxManySkipRow pSkip maxSkipCount p = mxManySkip Direction.Vertical pSkip maxSkipCount p
+let mxRowManySkip pSkip maxSkipCount p = mxManySkip Direction.Vertical pSkip maxSkipCount p
 
 let rm p = mxMany1 Direction.Vertical p
 

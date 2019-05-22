@@ -1,6 +1,6 @@
 ﻿# Release Notes
 
-## 1.0 - tbd
+## 1.0.1 - tbd
 * REFACTOR (Simplify logic; Less codes)
 
 ## 0.3.10 - 2019-04-18

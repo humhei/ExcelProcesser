@@ -3,7 +3,9 @@ module Runner
 open Expecto
 open Expecto.Logging
 open System
-open Tests.MyTests
+open Tests.MatrixTests
+open Tests.MathTests
+open Tests.MatrixAstTests
 let testConfig =  
     { Expecto.Tests.defaultConfig with 
          parallelWorkers = 1
@@ -11,8 +13,11 @@ let testConfig =
 
 let liteDbTests = 
     testList "All tests" [  
-        MyTests
+        matrixTests
+        matrixAstTests
+        mathTests
     ]
+
 
 [<EntryPoint>]
 let main argv = 

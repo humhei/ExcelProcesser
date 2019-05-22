@@ -47,6 +47,7 @@ let pFormula (firstFormula : Formula) =
         //if cell.Address = "B13" then printf ""
         formula.StartsWith(Enum.GetName(typeof<Formula>, firstFormula) + "(")
 
+
 let pFParsec (p : Parser<_, _>) =
     fun (cell : ExcelRangeBase) ->
         let text = cell.Text

@@ -5,11 +5,12 @@
     <TargetFramework>netcoreapp2.2</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="resources\matrix.xlsx">
+    <None Include="resources\testData.xlsx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <Compile Include="Tests.Types.fs" />
-    <Compile Include="Tests.MyTests.fs" />
+    <Compile Include="Tests.MatrixTests.fs" />
+    <Compile Include="Tests.MathTests.fs" />
     <Compile Include="Tests.Runner.fs" />
   </ItemGroup>
   <ItemGroup>
