@@ -1,8 +1,8 @@
-module Tests.MatrixTests
+﻿module Tests.MatrixTreeTests
 open Expecto
 open ExcelProcesser
 open Tests.Types
-open MatrixParsers
+open MatrixParserTree
 open FParsec
 open OfficeOpenXml
 open System.IO
@@ -14,24 +14,19 @@ let excelPackage = new ExcelPackage(FileInfo(XLPath.testData))
 
 let worksheet = excelPackage.Workbook.Worksheets.["Matrix"]
 
-let matrixTests =
-  testList "MatrixTests" [
-    testCase "mxText" <| fun _ -> 
+let matrixTreeTests =
+  testList "MatrixTreeTests" [
+    ftestCase "mxText" <| fun _ -> 
         let results = runMatrixParser worksheet (mxText "mxTextA")
         match results with 
         | ["mxTextA"] -> pass()
         | _ -> fail()
 
-    ftestCase "mxOR" <| fun _ -> 
-        [1..1000]
-        |> List.iter (fun _ ->
-            runMatrixParser worksheet (mxOR (mxText "mxOR_A") (mxText "mxOR_B"))
-            |> ignore
-        )
-        let results = runMatrixParser worksheet (mxOR (mxText "mxOR_A") (mxText "mxOR_B"))
-        match results with 
-        | [Choice1Of2 "mxOR_A";Choice2Of2 "mxOR_B"] -> pass()
-        | _ -> fail()
+    //testCase "mxOR" <| fun _ -> 
+    //    let results = runMatrixParser worksheet (mxOR (mxText "mxOR_A") (mxText "mxOR_B"))
+    //    match results with 
+    //    | [Choice1Of2 "mxOR_A";Choice2Of2 "mxOR_B"] -> pass()
+    //    | _ -> fail()
 
     //testCase "c2" <| fun _ -> 
     //    let results = runMatrixParser worksheet (c2 (mxText "C2A") (mxText "C2B"))

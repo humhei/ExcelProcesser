@@ -5,7 +5,6 @@ open Expecto.Logging
 open System
 open Tests.MatrixTests
 open Tests.MathTests
-open Tests.MatrixAstTests
 let testConfig =  
     { Expecto.Tests.defaultConfig with 
          parallelWorkers = 1
@@ -14,7 +13,6 @@ let testConfig =
 let liteDbTests = 
     testList "All tests" [  
         matrixTests
-        matrixAstTests
         mathTests
     ]
 
