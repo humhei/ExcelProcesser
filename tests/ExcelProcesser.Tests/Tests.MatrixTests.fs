@@ -26,6 +26,7 @@ let matrixTests =
         | _ -> fail()
 
     testCase "mxOR" <| fun _ -> 
+
         let results = runMatrixParser worksheet (mxOR (mxText "mxOR_A") (mxText "mxOR_B"))
         match results with 
         | [Choice1Of2 "mxOR_A";Choice2Of2 "mxOR_B"] -> pass()

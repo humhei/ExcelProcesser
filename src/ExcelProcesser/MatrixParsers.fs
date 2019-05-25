@@ -196,7 +196,7 @@ with
 [<RequireQualifiedAccess>]
 module OutputMatrixStream =
 
-    let applyDirectionToShift direction (stream: OutputMatrixStream<_>) =
+    let applyDirectionToShift direction (stream: OutputMatrixStream<'result>) =
         { stream with 
             Shift = Shift.applyDirection stream.Result.RelativeShift direction stream.Shift }
 
@@ -212,70 +212,61 @@ module OutputMatrixStream =
             { Value = mapping stream.Result.Value
               RelativeShift = stream.Result.RelativeShift }}
 
-    let retype (stream: OutputMatrixStream<'result>) =
+    let retype (stream: OutputMatrixStream<_>) =
         { Range = stream.Range 
           Shift = stream.Shift 
           Result = 
             { Value = unbox stream.Result.Value
               RelativeShift = stream.Result.RelativeShift }}
 
-    let untype (stream: OutputMatrixStream<'result>) =
-        { Range = stream.Range 
-          Shift = stream.Shift 
-          Result = 
-            { Value = box stream.Result.Value
-              RelativeShift = stream.Result.RelativeShift }}
+    //let untype (stream: OutputMatrixStream<'result>) =
+    //    { Range = stream.Range 
+    //      Shift = stream.Shift 
+    //      Result = 
+    //        { Value = box stream.Result.Value
+    //          RelativeShift = stream.Result.RelativeShift }}
 
 [<RequireQualifiedAccess>]
 type MatrixStream<'result> =
     | Input of InputMatrixStream
     | Output of OutputMatrixStream<'result>
 
-type MatrixParserPort<'input, 'result> = 
-    { Input: 'input
-      ResultGetter: (ExcelRangeBase -> 'result)}
+
+type MatrixParserContentKind =
+    | Text of string
+    | TextF of (string -> bool)
+    | Space
 
 [<RequireQualifiedAccess>]
-module MatrixParserPort =
-    let mapResult mapping port =
-        { Input = port.Input 
-          ResultGetter = port.ResultGetter >> mapping }
+module MatrixParserContentKind =
+    let cellParser = function
+        | Text input -> pText input
+        | TextF input -> pTextf input
+        | Space -> pSpace
+
 
 type MatrixParserContent<'result> =
-    | Text of MatrixParserPort<string, 'result>
-    | TextF of MatrixParserPort<string -> bool, 'result>
-    | Space of MatrixParserPort<unit, 'result>
+    { ResultGetter: ExcelRangeBase -> 'result
+      Kind: MatrixParserContentKind
+      ResultType: Type }
 
 [<RequireQualifiedAccess>]
 module MatrixParserContent =
-    let cellParser = function
-        | Text port -> pText port.Input
-        | TextF port -> pTextf port.Input
-        | Space _ -> pSpace
 
-    let resultGetter = function 
-        | Text port -> port.ResultGetter
-        | TextF port -> port.ResultGetter
-        | Space port -> port.ResultGetter 
+    let cellParser matrixParserContent = 
+        MatrixParserContentKind.cellParser matrixParserContent.Kind
 
-    let untype = function
-        | Text port -> 
-            Text (MatrixParserPort.mapResult box port)
-        | TextF port ->
-            TextF (MatrixParserPort.mapResult box port)
-        | Space port ->
-            Space (MatrixParserPort.mapResult box port)
+    let mapResultValue resultType (f: 'oldResult -> 'newResult) p = 
 
-    let mapResultValue f p = 
-        match p with
-        | Text port -> 
-            Text (MatrixParserPort.mapResult f port)
-        | TextF port ->
-            TextF (MatrixParserPort.mapResult f port)
-        | Space port ->
-            Space (MatrixParserPort.mapResult f port)
+        { ResultGetter = p.ResultGetter >> f
+          Kind = p.Kind 
+          ResultType = resultType }
 
-    let retype p = mapResultValue id p
+    let untype matrixParserContent =
+        { ResultGetter = matrixParserContent.ResultGetter >> box 
+          Kind = matrixParserContent.Kind 
+          ResultType = matrixParserContent.ResultType }
+
 
 type MatrixParser<'result> =
     | Content of MatrixParserContent<'result>
@@ -286,49 +277,80 @@ with
         match x with 
         | Content content -> 
             content.ToString()
-        | Operator operator -> 
+        | Operator (operator) -> 
             operator.ToString()
 
     member private x.DebugView = 
         x.ToString()
 
+
 and MatrixParserOperator =
     | OR of MatrixParser<obj> * MatrixParser<obj>
-    | Pipe2 of Direction * MatrixParser<obj> * MatrixParser<obj>
+    | Pipe2 of Direction * MatrixParser<obj> * MatrixParser<obj> * fmap: (option<obj * obj -> obj>)
     | Pipe3 of Direction * MatrixParser<obj> * MatrixParser<obj> * MatrixParser<obj>
     | Many of Direction * maxCount: int option * MatrixParser<obj>
     | Many1 of Direction * maxCount: int option * MatrixParser<obj>
     | ManySkip of Direction * pSkip: MatrixParser<obj> * maxSkipCount: int * MatrixParser<obj>
 
 
-
-let private targetTypeUciesGenericArgumentsCache = new ConcurrentDictionary<Type, UnionCaseInfo [] * Type []>()
-let private uciesAndGenericArguments (targetType: Type) =
-    let ucies, generics =
-        targetTypeUciesGenericArgumentsCache.GetOrAdd(targetType, fun _ ->
-            let generics = targetType.GetGenericArguments()
-                                
-            let choiceTp = 
-                typedefof<Choice<_,_>>.MakeGenericType(generics)
-
-            FSharpType.GetUnionCases choiceTp, generics
-        )
-    ucies, generics
-
-let private targetTypeTupleElementsCache = new ConcurrentDictionary<Type, Type []>()
-let private tupleElements (targetType: Type) =
-    targetTypeTupleElementsCache.GetOrAdd(targetType, fun _ ->
-        FSharpType.GetTupleElements targetType
+let private orChoiceUciesCache = new ConcurrentDictionary<Type * Type, UnionCaseInfo []>()
+let private getOrAddOrChoiceUcies (resultType1, resultType2) =
+    let key = resultType1, resultType2
+    orChoiceUciesCache.GetOrAdd(key, fun _ ->
+        let choiceGenericType = typedefof<Choice<_, _>>
+        FSharpType.GetUnionCases 
+            (choiceGenericType.MakeGenericType(resultType1, resultType2))
     )
 
+let private pipe2TupleCache = new ConcurrentDictionary<Type * Type, Type>()
 
-type StreamTransfer<'result> = InputMatrixStream -> OutputMatrixStream<'result> option
+let private getOrAddPipe2Tuple (resultType1, resultType2) =
+    let key = resultType1, resultType2
+    pipe2TupleCache.GetOrAdd(key, fun _ ->
+        FSharpType.MakeTupleType([|resultType1; resultType2|])
+    )
+
+let private pipe3TupleCache = new ConcurrentDictionary<Type * Type * Type, Type>()
+
+let private getOrAddPipe3Tuple (resultType1, resultType2, resultType3) =
+    let key = resultType1, resultType2, resultType3
+    pipe3TupleCache.GetOrAdd(key, fun _ ->
+        FSharpType.MakeTupleType([|resultType1; resultType2; resultType3|])
+    )
+
+let private manyListCache = new ConcurrentDictionary<Type, Type>()
+
+let private getOrAddManyList (elementType: Type) =
+    manyListCache.GetOrAdd(elementType, fun _ ->
+        typedefof<List<_>>.MakeGenericType(elementType)
+    )
+
+//let private uciesAndGenericArguments (targetType: Type) =
+//    let ucies, generics =
+//        targetTypeUciesGenericArgumentsCache.GetOrAdd(targetType, fun _ ->
+//            let generics = targetType.GetGenericArguments()
+                                
+//            let choiceTp = 
+//                typedefof<Choice<_,_>>.MakeGenericType(generics)
+
+//            FSharpType.GetUnionCases choiceTp, generics
+//        )
+//    ucies, generics
+
+//let private targetTypeTupleElementsCache = new ConcurrentDictionary<Type, Type []>()
+//let private tupleElements (targetType: Type) =
+//    targetTypeTupleElementsCache.GetOrAdd(targetType, fun _ ->
+//        FSharpType.GetTupleElements targetType
+//    )
+
+
+type StreamTransfer<'result> = InputMatrixStream -> option<OutputMatrixStream<'result>>
 
 [<RequireQualifiedAccess>]
 module StreamTransfer =
     let mapOutputStream f transfer =
         fun (inputStream: InputMatrixStream) ->
-            let (outputStream: OutputMatrixStream<'result> option) = transfer inputStream
+            let (outputStream: OutputMatrixStream<_> option) = transfer inputStream
             match outputStream with 
             | Some outputStream ->
                 f outputStream
@@ -343,38 +365,71 @@ module StreamTransfer =
 [<RequireQualifiedAccess>]
 module MatrixParser =
 
-    let private listOfArrayMethodInfo = 
+    let rec getResultType = function
+        | Operator operator -> 
+            match operator with 
+            | OR (p1, p2) -> 
+                let ucies = 
+                    getOrAddOrChoiceUcies (getResultType p1,getResultType p2)
+                ucies.[0].DeclaringType
+
+            | Pipe2 (_, p1, p2, _) -> 
+                getOrAddPipe2Tuple (getResultType p1,getResultType p2)
+
+            | Pipe3 (_, p1, p2, p3) ->
+                getOrAddPipe3Tuple (getResultType p1,getResultType p2,getResultType p3)
+
+            | Many (_, _, p) | Many1 (_, _, p) | ManySkip(_, _, _, p)->
+                getOrAddManyList (getResultType p)
+
+
+        | Content content -> content.ResultType
+
+    let private listModule =
         lazy 
             let fsharpCoreAssembly =
                 AppDomain.CurrentDomain.GetAssemblies()
                 |> Array.find (fun ass ->
                     ass.FullName.StartsWith "FSharp.Core,"
                 )
-            let listModule = fsharpCoreAssembly.ExportedTypes |> Seq.find (fun exp -> exp.FullName = "Microsoft.FSharp.Collections.ListModule")
-            listModule.GetMethod("OfArray")
+            fsharpCoreAssembly.ExportedTypes |> Seq.find (fun exp -> exp.FullName = "Microsoft.FSharp.Collections.ListModule")
+    
+    let private listOfArrayMethodInfo = 
+        lazy 
+            listModule.Value.GetMethod("OfArray")
+
+    let private listConcatMethodInfo = 
+        lazy 
+            listModule.Value.GetMethod("Concat")
 
 
-    let untype = function
+    let untype (p: MatrixParser<'result>) = 
+        match p with
         | Content content -> 
             MatrixParserContent.untype content
             |> Content
-        | Operator operator -> Operator operator
+
+        | Operator (operator) -> Operator (operator)
 
 
-    let mapResultValue f = function
+    let mapResultValue resultType f = function
         | Content content -> 
-            MatrixParserContent.mapResultValue f content
+            MatrixParserContent.mapResultValue resultType f content
             |> Content
-        | Operator operator -> Operator operator
+
+        | Operator (operator) -> Operator (operator)
 
 
+    //let retype = function
+    //    | Content content -> 
+    //        MatrixParserContent.retype content
+    //        |> Content
+    //    | Operator (tp, operator) -> Operator (tp, operator)
 
-    let retype p = mapResultValue unbox p
-
-    let internal streamTransfer (p: MatrixParser<'result>) : InputMatrixStream -> option<OutputMatrixStream<'result>> =
+    let internal streamTransfer (p: MatrixParser<'result>) : StreamTransfer<'result> =
         let p = untype p
 
-        let rec loop (targetType: Type) (p: MatrixParser<obj>) =
+        let rec loop (p: MatrixParser<obj>) =
             match p with
             | MatrixParser.Content content ->
                 fun (inputStream: InputMatrixStream) ->
@@ -383,7 +438,7 @@ module MatrixParser =
                             if cellParser range then Some (getResult range)
                             else None
 
-                    let cellParserOpt = toOpt (MatrixParserContent.cellParser content) (MatrixParserContent.resultGetter content)
+                    let cellParserOpt = toOpt (MatrixParserContent.cellParser content) (content.ResultGetter)
                     let offsetedRange = ExcelRangeBase.offset inputStream.Shift inputStream.Range
                     match cellParserOpt offsetedRange with 
                     | Some result ->
@@ -396,38 +451,46 @@ module MatrixParser =
                         |> Some
                     | None -> None
 
-            | MatrixParser.Operator operator ->
+            | MatrixParser.Operator (operator) ->
                     match operator with 
                     | OR (p1, p2) ->
                         fun (inputStream: InputMatrixStream) ->
+                            let ucies = 
+                                let resultType1, resultType2 = getResultType p1, getResultType p2
+                                getOrAddOrChoiceUcies (resultType1, resultType2)
 
-                            let ucies, generics = uciesAndGenericArguments targetType
-                        
-                            match loop generics.[0] p1 inputStream with 
+                            match loop p1 inputStream with 
                             | Some outputStream ->
                                 (OutputMatrixStream.mapResultValue (fun v -> FSharpValue.MakeUnion(ucies.[0], [|v|])) outputStream)
                                 |> Some
 
                             | None ->
-                                match loop generics.[1] p2 inputStream with
+                                match loop p2 inputStream with
                                 | Some outputStream ->
                                     (OutputMatrixStream.mapResultValue (fun v -> FSharpValue.MakeUnion(ucies.[1], [|v|])) outputStream)
                                     |> Some
                                 | None -> None
         
-                    | Pipe2 (direction, p1, p2) ->
+                    | Pipe2 (direction, p1, p2, fmap) ->
                         fun inputStream1 ->
-                            let tupleElements = tupleElements targetType
-                            let newStream1 = loop tupleElements.[0] p1 inputStream1
+                            let resultType1, resultType2 = getResultType p1, getResultType p2
+                            let tupleType = getOrAddPipe2Tuple (resultType1, resultType2)
+                            let newStream1 = loop p1 inputStream1
                             match newStream1 with
                             | Some newStream1 ->
                                 let inputStream2 = (OutputMatrixStream.applyDirectionToShift direction newStream1).AsInputStream
             
-                                match loop tupleElements.[1] p2 inputStream2 with 
+                                match loop p2 inputStream2 with 
                                 | Some newStream2 ->
                                     OutputMatrixStream.mapResult (fun result2 -> 
                                         { RelativeShift = RelativeShift.plus direction newStream1.Result.RelativeShift result2.RelativeShift
-                                          Value = (FSharpValue.MakeTuple ([|newStream1.Result.Value; result2.Value|], targetType))
+                                          Value = 
+                                            let value = (FSharpValue.MakeTuple ([|newStream1.Result.Value; result2.Value|], tupleType))
+                                            match fmap with 
+                                            | Some fmap -> 
+                                                let fields = FSharpValue.GetTupleFields value
+                                                fmap (fields.[0], fields.[1])
+                                            | None -> value
                                         }
                                     ) newStream2
                                     |> Some
@@ -435,29 +498,27 @@ module MatrixParser =
                                 | None -> None
                             | None -> None
 
-                    //let pipe3 direction p1 p2 p3 f =
-                    //    pipe2 direction (pipe2 direction p1 p2 id) p3 (fun ((a, b), c) ->
-                    //        f (a, b, c)
-                    //    )
+                    ////let pipe3 direction p1 p2 p3 f =
+                    ////    pipe2 direction (pipe2 direction p1 p2 id) p3 (fun ((a, b), c) ->
+                    ////        f (a, b, c)
+                    ////    )
 
                     | Pipe3 (direction, p1, p2, p3) ->
-                        let tupleElements = tupleElements targetType
-                        let innerTupleType = (FSharpType.MakeTupleType [| tupleElements.[0]; tupleElements.[1] |])
-                        let innerPipe2 = (Operator (Pipe2 (direction, p1, p2)))
+                        let tupleType = getOrAddPipe3Tuple (getResultType p1, getResultType p2, getResultType p3)
+                        let innerPipe2 = (Operator (Pipe2 (direction, p1, p2, None)))
                         loop 
-                            (FSharpType.MakeTupleType [| innerTupleType; tupleElements.[2] |])
-                            (Operator (Pipe2 (direction, innerPipe2, p3)))
+                            (Operator (Pipe2 (direction, innerPipe2, p3, None)))
                         |> StreamTransfer.mapOutputStreamResultValue (fun v ->
                             let a,b = 
                                 let ab = FSharpValue.GetTupleField (v,0)
                                 FSharpValue.GetTupleField (ab, 0),FSharpValue.GetTupleField (ab, 1)
                             let c = FSharpValue.GetTupleField (v,1)
-                            FSharpValue.MakeTuple([| a; b; c |], targetType)
+                            FSharpValue.MakeTuple([| a; b; c |], tupleType)
                         )
 
                     | Many (direction, maxCount, p) ->
                         fun inputStream ->
-                            let elelmentType = targetType.GetGenericArguments().[0]
+                            let elelmentType = getResultType p
                             let rec loopMany stream (accum: OutputMatrixStream<obj> list) =
                                 let isReachMaxCount =
                                     match maxCount with 
@@ -469,7 +530,7 @@ module MatrixParser =
                                 else
                                     match stream with
                                     | MatrixStream.Input inputStream ->
-                                        match loop elelmentType p inputStream with 
+                                        match loop p inputStream with 
                                         | Some outputStream ->
                                             loopMany (MatrixStream.Output outputStream) (outputStream :: accum) 
                                         | None -> accum
@@ -477,7 +538,7 @@ module MatrixParser =
                                     | MatrixStream.Output outputStream1 ->
                                         let inputStream = (OutputMatrixStream.applyDirectionToShift direction outputStream1).AsInputStream
 
-                                        match loop elelmentType p inputStream with 
+                                        match loop p inputStream with 
                                         | Some outputStream2 ->
                                             let newOutputStream = 
                                                 OutputMatrixStream.mapResult (fun result2 -> 
@@ -526,7 +587,7 @@ module MatrixParser =
 
                     | Many1 (direction, maxCount, p) ->
                         fun inputStream ->
-                            match loop targetType (Operator(Many (direction, maxCount, p))) inputStream with 
+                            match loop (Operator(Many (direction, maxCount, p))) inputStream with 
                             | Some outputStream ->
                                 let resultValue = outputStream.Result.Value
                                 let length = resultValue.GetType().GetProperty("Length").GetValue(resultValue)
@@ -535,83 +596,90 @@ module MatrixParser =
                             | None -> None
 
                     | ManySkip (direction, pSkip, maxSkipCount, p) ->
-                        fun inputStream ->
-                            let skip = Operator(Many(direction, Some maxSkipCount, pSkip))
-                            let many1 = Operator(Many1 (direction, None, p))
 
-                            let piped = 
-                                Operator(Pipe2(direction, skip, many1))
-                            
-                            match loop targetType (Operator(Many (direction, maxCount, p))) inputStream with 
-                            | Some outputStream ->
-                                let resultValue = outputStream.Result.Value
-                                let length = resultValue.GetType().GetProperty("Length").GetValue(resultValue)
-                                if unbox length = 0 then None
-                                else Some outputStream
-                            | None -> None
+                        let elementType = getResultType p
+                        let resultType = getOrAddManyList elementType
+
+                        let skip = 
+                            Operator(
+                                Many (direction, Some maxSkipCount, pSkip)
+                            )
+
+                        let many1 = Operator(Many1 (direction, None, p))
+
+                        let piped = 
+                            (Operator(Pipe2 (direction, skip, many1, Some snd)))
+
+                        let p = 
+                            Operator(Pipe2(direction, many1, Operator(Many1(direction, None, piped)),Some (fun (a,b) ->
+                                let consed = resultType.GetMethod("Cons").Invoke(null,[|a; b|])
+                                listConcatMethodInfo.Value.MakeGenericMethod(elementType).Invoke(null, [| consed |])
+                            )))
+
+                        loop p
 
         fun inputStream ->       
-            let targetType = typeof<'result>
-            match loop targetType p inputStream with 
+            match loop p inputStream with 
             | Some outputStream ->
                 Some (OutputMatrixStream.retype outputStream)
             | None -> None
 
-    let mapContent mapping (p: MatrixParser<'result>): MatrixParser<'result> =
-        let rec loop (targetType: Type) (p: MatrixParser<obj>) =
-            match p with 
-            | Content content -> Content (mapping content)
-            | Operator operator ->
-                match operator with 
-                | OR (p1, p2) ->
-                    let _, generics = uciesAndGenericArguments targetType
-                    OR (loop generics.[0] p1, loop generics.[1] p2)
-                | Pipe2 (direction, p1, p2) ->
-                    let tupleElements = tupleElements targetType
-                    Pipe2 (direction, loop tupleElements.[0] p1, loop tupleElements.[1] p2)
-                | Pipe3 (direction, p1, p2, p3) ->
-                    let tupleElements = tupleElements targetType
-                    Pipe3 (direction, loop tupleElements.[0] p1, loop tupleElements.[1] p2, loop tupleElements.[2] p3)
-                | Many (direction, maxCount, p) ->
-                    let elementType = targetType.GetGenericArguments().[0]
-                    Many (direction, maxCount, loop elementType p)
-                | Many1 (direction, maxCount, p) ->
-                    let elementType = targetType.GetGenericArguments().[0]
-                    Many1 (direction, maxCount, loop elementType p)
+    //let mapContent mapping (p: MatrixParser<'result>): MatrixParser<'result> =
+    //    let rec loop (p: MatrixParser<obj>) =
+    //        match p with 
+    //        | Content content -> Content (mapping content)
+    //        | Operator (tp, operator) ->
+    //            let newOperator =
+    //            match operator with 
+    //            | OR (p1, p2) ->
+    //                OR (loop p1, loop p2)
+    //            //| Pipe2 (direction, p1, p2) ->
+    //            //    let tupleElements = tupleElements targetType
+    //            //    Pipe2 (direction, loop tupleElements.[0] p1, loop tupleElements.[1] p2)
+    //            //| Pipe3 (direction, p1, p2, p3) ->
+    //            //    let tupleElements = tupleElements targetType
+    //            //    Pipe3 (direction, loop tupleElements.[0] p1, loop tupleElements.[1] p2, loop tupleElements.[2] p3)
+    //            //| Many (direction, maxCount, p) ->
+    //            //    let elementType = targetType.GetGenericArguments().[0]
+    //            //    Many (direction, maxCount, loop elementType p)
+    //            //| Many1 (direction, maxCount, p) ->
+    //            //    let elementType = targetType.GetGenericArguments().[0]
+    //            //    Many1 (direction, maxCount, loop elementType p)
 
-                |> Operator
+    //            |> Operator
 
-        loop (typeof<'result>) (untype p)
-        |> retype
+        //loop (typeof<'result>) (untype p)
+        //|> retype
 
 //let (|||>) p f = MatrixParser.mapResultValue f p
 
+
 let mxTextf (prediate: string -> bool ) =
-    { Input = prediate
-      ResultGetter = ExcelRangeBase.getText }
-    |> TextF
+    { Kind = TextF prediate
+      ResultGetter = ExcelRangeBase.getText
+      ResultType = typeof<string> }
     |> Content
 
 let mxText (text: string) =
-    { Input = text 
-      ResultGetter = ExcelRangeBase.getText }
-    |> Text
+    { Kind = Text text 
+      ResultGetter = ExcelRangeBase.getText
+      ResultType = typeof<string>}
     |> Content
 
 let mxSpace =
-    { Input = () 
-      ResultGetter = ignore }
-    |> Space
+    { Kind = Space 
+      ResultGetter = ignore
+      ResultType = typeof<unit> }
     |> Content
 
 
 let mxOR (p1: MatrixParser<'result1>) (p2: MatrixParser<'result2>): MatrixParser<Choice<'result1, 'result2>> =
     (MatrixParser.untype p1,MatrixParser.untype p2)
     |> OR
-    |> Operator
+    |> fun operator -> Operator (operator)
 
 let pipe2 direction (p1: MatrixParser<'result1>) (p2: MatrixParser<'result2>): MatrixParser<'result1 * 'result2> =
-    (direction, MatrixParser.untype p1, MatrixParser.untype p2)
+    (direction, MatrixParser.untype p1, MatrixParser.untype p2, None)
     |> Pipe2
     |> Operator
 
@@ -657,23 +725,11 @@ let cm (p: MatrixParser<'result>)  =
 let rm (p: MatrixParser<'result>)  =
     mxMany1WithMaxCount Direction.Vertical None p
 
-//let mxManySkip direction pSkip maxSkipCount p =
+let mxManySkip direction pSkip maxSkipCount (p: MatrixParser<'result>) : MatrixParser<'result list> =
+    ManySkip (direction, MatrixParser.untype pSkip, maxSkipCount, MatrixParser.untype p)
+    |> Operator
 
-//    let many1 = mxMany1 direction p
-
-//    let piped = 
-//        let skip = 
-//            mxManyWithMaxCount direction (Some maxSkipCount) pSkip 
-
-//        pipe2 direction skip many1
-//        |||> snd
-
-//    pipe2 direction many1 (mxMany direction piped)
-//    |||> fun (a, b) ->
-//        a :: b
-//        |> List.concat
-
-//let mxColManySkip pSkip maxSkipCount p = mxManySkip Direction.Horizontal pSkip maxSkipCount p
+let mxColManySkip pSkip maxSkipCount p = mxManySkip Direction.Horizontal pSkip maxSkipCount p
 
 let runMatrixParserForRangesWithStreamsAsResult (ranges : seq<ExcelRangeBase>) (p : MatrixParser<'result>) : OutputMatrixStream<'result> list =
     let inputStreams = 
