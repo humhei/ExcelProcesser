@@ -55,6 +55,17 @@ let pFParsec (p : Parser<_, _>) =
         | ParserResult.Success (result, _, _) -> Some result
         | _ -> None
 
+
 let pSpace range = pTextf (fun text -> text.Trim() = "") range
 
 let pAny : CellParser = fun _ -> true
+
+let pMerge = fun (range: ExcelRangeBase) -> range.Merge
+
+let pMergeStarter = fun (range: ExcelRangeBase) -> 
+    if range.Merge then 
+        let worksheet = range.Worksheet
+        let index = ExcelWorksheet.getMergeCellId range worksheet
+        let addr = worksheet.MergedCells.[index-1]
+        worksheet.Cells.[addr].Start.Address = range.Address
+    else false

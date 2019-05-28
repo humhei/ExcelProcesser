@@ -6,6 +6,7 @@ open MatrixParsers
 open FParsec
 open OfficeOpenXml
 open System.IO
+open ExcelProcesser.Extensions
 
 let pass() = Expect.isTrue true "passed"
 let fail() = Expect.isTrue false "failed"
@@ -20,6 +21,18 @@ let matrixTests =
         let results = runMatrixParser worksheet (mxText "mxTextA")
         match results with 
         | ["mxTextA"] -> pass()
+        | _ -> fail()
+
+    testCase "mxMergeStarter" <| fun _ -> 
+        let results = runMatrixParser worksheet mxMergeStarter
+        match results with 
+        | "Merge1" :: "Merge2":: _ -> pass()
+        | _ -> fail()
+
+    testCase "mxMerge horizontal" <| fun _ -> 
+        let results = runMatrixParser worksheet (mxMerge Direction.Horizontal)
+        match results with 
+        | [("Merge1", _); ("Merge2", _)] -> pass()
         | _ -> fail()
 
     testCase "mxOR" <| fun _ -> 
@@ -50,6 +63,16 @@ let matrixTests =
         let results = runMatrixParser worksheet (r3 (mxText "R3A") (mxText "R3B") (mxText "R3C"))
         match results with 
         | ["R3A", "R3B", "R3C"] -> pass()
+        | _ -> fail()
+
+    testCase "compose c2 and c2" <| fun _ -> 
+        let results = 
+            runMatrixParser 
+                worksheet 
+                (c2 (c2 (mxText "C2_C2A") (mxText "C2_C2B")) (mxText "C2_C2C"))
+
+        match results with 
+        | [("C2_C2A","C2_C2B"), "C2_C2C"] -> pass()
         | _ -> fail()
 
     testCase "compose c2 and r2" <| fun _ -> 
@@ -131,6 +154,16 @@ let matrixTests =
         | ["cm_skip_1"; "cm_skip_2"; "cm_skip_3"] :: _  -> pass()
         | _ -> fail()
 
+    testCase "column many with skip backtrack" <| fun _ -> 
+        let userRange = ExcelWorksheet.getUserRange worksheet
+        let results = 
+            runMatrixParserForRangesWithStreamsAsResult
+                userRange
+                (mxColManySkip mxSpace 1 (mxTextf(fun text -> text.StartsWith "cm_skip_backTrack")))
+        match results.[0].Shift.Last with 
+        | Horizontal ({X = 0; Y = 0},1)  -> pass()
+        | _ -> fail()
+
     testCase "mx until" <| fun _ -> 
         let results = 
             runMatrixParser 
@@ -140,5 +173,48 @@ let matrixTests =
         match results with 
         | ("mx_until1", ("mx_until4")) :: _  -> pass()
         | _ -> fail()
+
+    testCase "cross area1 reRange" <| fun _ -> 
+        let userRange = ExcelWorksheet.getUserRange worksheet
+        let results = 
+            runMatrixParserForRangesWithStreamsAsResult  
+                userRange
+                (c3 
+                    (mxText "Cross_1A") 
+                    (r3 (mxText "Cross_1B") (mxText "Cross_1C") (mxText "Cross_1D"))
+                    (mxText "Cross_1E")
+                )
+        results 
+        |> List.map (OutputMatrixStream.reRange >> (fun range -> 
+            let ranges = ExcelRangeBase.asRanges range
+            List.map ExcelRangeBase.getText ranges
+            |> List.distinct
+        ))
+        |> function
+            | ["Cross_1A"; "Cross_1B";"Cross_1E";"Cross_1C";"Cross_1D"] :: _ -> pass()
+            | _ -> fail()
+
+    testCase "cross area2 reRange" <| fun _ -> 
+        let userRange = ExcelWorksheet.getUserRange worksheet
+        let results = 
+            runMatrixParserForRangesWithStreamsAsResult  
+                userRange
+                (c2 
+                    (mxText "Cross_2A") 
+                    (r3 
+                        (mxText "Cross_2B") 
+                        (mxText "Cross_2C") 
+                        (c2 (mxText "Cross_2D") (mxText "Cross_2E"))
+                    )
+                )
+        results 
+        |> List.map (OutputMatrixStream.reRange  >> (fun range -> 
+            let ranges = ExcelRangeBase.asRanges range
+            List.map ExcelRangeBase.getText ranges
+            |> List.distinct
+        ))
+        |> function
+            | ["Cross_2A"; "Cross_2B";"Cross_2C";"Cross_2D";"Cross_2E"] :: _ -> pass()
+            | _ -> fail()
 
   ]

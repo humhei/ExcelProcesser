@@ -12,9 +12,9 @@ let mxFormulaAsInt32 formula =
     |||> Int32.Parse
         
 
-
 let mxSum direction =
     mxUntil direction None (mxFParsec pint32) (mxFormulaAsInt32 Formula.SUM)
     |> MatrixParser.filterOutputStreamByResultValue (fun (numbers, sumNumber) ->
         (List.sum numbers = sumNumber) 
     )
+

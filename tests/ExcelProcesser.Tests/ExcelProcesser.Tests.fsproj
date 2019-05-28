@@ -11,6 +11,7 @@
     <Compile Include="Tests.Types.fs" />
     <Compile Include="Tests.MatrixTests.fs" />
     <Compile Include="Tests.MathTests.fs" />
+    <Compile Include="Tests.SematicsParsers.fs" />
     <Compile Include="Tests.Runner.fs" />
   </ItemGroup>
   <ItemGroup>

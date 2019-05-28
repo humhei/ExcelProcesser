@@ -10,7 +10,7 @@ open OfficeOpenXml.Style
 open System
 open System.IO
 
-module internal Extensions =
+module Extensions =
 
     [<RequireQualifiedAccess>]
     module ExcelColor =
@@ -36,6 +36,9 @@ module internal Extensions =
                       let content = worksheet.Cells.[i, j]
                       yield content :> ExcelRangeBase ]
 
+        let getMergeCellId (range: ExcelRangeBase) (worksheet: ExcelWorksheet) =
+            worksheet.GetMergeCellId (range.Start.Row, range.Start.Column)
+
     [<RequireQualifiedAccess>]
     module ExcelRangeBase =
 
@@ -44,3 +47,5 @@ module internal Extensions =
             |> List.ofSeq
 
         let getText (range: ExcelRangeBase) = range.Text
+
+        let getAddressOfRange (range: ExcelRangeBase) = range.Address

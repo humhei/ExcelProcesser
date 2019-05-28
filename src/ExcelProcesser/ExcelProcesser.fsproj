@@ -9,6 +9,7 @@
     <Compile Include="CellParsers.fs" />
     <Compile Include="MatrixParsers.fs" />
     <Compile Include="MathParsers.fs" />
+    <Compile Include="SematicsParsers.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="EPPlus" Version="4.5.3.1" />
