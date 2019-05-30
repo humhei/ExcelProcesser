@@ -23,11 +23,34 @@ let sematicsParsers =
         | ("Size", [28; 29; 30; 31; 32; 33; 34; 35])  -> pass()
         | _ -> fail()
 
-    ftestCase "groupingColumns" <| fun _ -> 
-        let results = runMatrixParser worksheet (mxGroupingColumns (mxFParsec pint32) (Some mxSpace) (mxFParsec pint32))
+    testCase "groupingColumn" <| fun _ -> 
+        let results = 
+            runMatrixParser 
+                worksheet 
+                (mxGroupingColumn 
+                    (GroupingColumnParserArg(mxFParsec pint32, Some mxSpace, mxFParsec pint32))
+                )
         
         match results.[0].ElementsList |> List.map (List.map snd) with 
         | [1; 2; 2; 2; 2; 2; 1; 1] :: [1; 1; 1; 2; 2; 1; 1; 1] :: [1] :: [1] :: [1] :: [1] :: [1] :: _ -> pass()
         | _ -> fail()
+
+    testCase "twoRowHeaderPivotTable frame" <| fun _ -> 
+        let results = 
+            runMatrixParser 
+                worksheet 
+                (TwoHeadersPivotTable.parse 
+                    (mxStyleName "Border") 
+                    (mxStyleName "Number") 
+                    (mxStyleName "Border")
+                    (GroupingColumnParserArg(mxFParsec pint32, Some mxSpace, mxFParsec pint32))
+                )
+        
+        pass()
+        //match results with 
+        //| ["ORDER NO.",("Pairs",([2040;980;96;96;96;96;96],3500)), "Volume"] -> pass()
+        //| _ -> fail()
+
+
 
   ]

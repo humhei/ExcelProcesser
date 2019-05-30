@@ -24,15 +24,16 @@ let matrixTests =
         | _ -> fail()
 
     testCase "mxMergeStarter" <| fun _ -> 
-        let results = runMatrixParser worksheet mxMergeStarter
+        let results = runMatrixParser worksheet (mxMergeStarter ||>> fun mergeStarter -> mergeStarter.Text)
         match results with 
         | "Merge1" :: "Merge2":: _ -> pass()
         | _ -> fail()
 
     testCase "mxMerge horizontal" <| fun _ -> 
-        let results = runMatrixParser worksheet (mxMerge Direction.Horizontal)
+        let results = 
+            runMatrixParser worksheet ((mxMerge Direction.Horizontal) ||>> fun (mergeStarter ,_) -> mergeStarter.Text)
         match results with 
-        | [("Merge1", _); ("Merge2", _)] -> pass()
+        | ["Merge1"; "Merge2"] -> pass()
         | _ -> fail()
 
     testCase "mxOR" <| fun _ -> 

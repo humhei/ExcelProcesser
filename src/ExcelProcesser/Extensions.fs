@@ -49,3 +49,5 @@ module Extensions =
         let getText (range: ExcelRangeBase) = range.Text
 
         let getAddressOfRange (range: ExcelRangeBase) = range.Address
+
+

@@ -107,6 +107,14 @@ with
             | _ -> shift
         loop x
 
+    member internal x.Folded =
+        let rec loop shift  =
+            match shift with 
+            | Compose shifts -> 
+                List.collect loop shifts
+            | _ -> [shift]
+        loop x 
+
 [<RequireQualifiedAccess>]
 module Shift =
 
@@ -209,6 +217,7 @@ with
 
     member x.LastCellShift = x.Shift.Last
 
+    member private x.FoldedShift = x.Shift.Folded
 
 [<RequireQualifiedAccess>]
 module OutputMatrixStream =
@@ -327,18 +336,23 @@ let mxAnySkip inputStream =
 let mxAnyOrigin inputStream = 
     mxCellParser pAny ExcelRangeBase.getText inputStream
 
-let (|||>) p f = 
+let (||>>) p f = 
     MatrixParser.mapOutputStream (fun outputStream ->
        Some (OutputMatrixStream.mapResultValue f outputStream) 
+    ) p
+
+let (|||>>) p f = 
+    MatrixParser.mapOutputStream (fun outputStream ->
+       Some (OutputMatrixStream.mapResultValue (f (outputStream)) outputStream) 
     ) p
 
 
 let mxOR (p1: MatrixParser<'result1>) (p2: MatrixParser<'result2>) =
     let p1 = 
-        p1 |||> Choice1Of2
+        p1 ||>> Choice1Of2
 
     let p2 = 
-        p2 |||> Choice2Of2
+        p2 ||>> Choice2Of2
 
     fun inputStream ->
         match p1 inputStream with
@@ -448,7 +462,11 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
                 | MatrixStream.Input inputStream ->
                     match p inputStream with 
                     | Some outputStream ->
-                        loop (MatrixStream.Output outputStream) (outputStream :: accum) 
+                        match outputStream.Result.RelativeShift with 
+                        | RelativeShift.Skip -> 
+                            accum
+                        | _ ->
+                            loop (MatrixStream.Output outputStream) (outputStream :: accum) 
                     | None -> accum
 
                 | MatrixStream.Output outputStream1 ->
@@ -456,12 +474,15 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
 
                     match p inputStream with 
                     | Some outputStream2 ->
-                        let newOutputStream = 
-                            OutputMatrixStream.mapResult (fun result2 -> 
-                                { RelativeShift = RelativeShift.plus direction outputStream1.Result.RelativeShift result2.RelativeShift
-                                  Value = result2.Value }
-                            ) outputStream2
-                        loop (MatrixStream.Output newOutputStream) (newOutputStream :: accum)
+                        match outputStream2.Result.RelativeShift with 
+                        | RelativeShift.Skip -> accum
+                        | _ ->
+                            let newOutputStream = 
+                                OutputMatrixStream.mapResult (fun result2 -> 
+                                    { RelativeShift = RelativeShift.plus direction outputStream1.Result.RelativeShift result2.RelativeShift
+                                      Value = result2.Value }
+                                ) outputStream2
+                            loop (MatrixStream.Output newOutputStream) (newOutputStream :: accum)
 
                     | None -> accum
 
@@ -510,7 +531,7 @@ let mxMany1 direction p =
     |> atLeastOne
 
 
-let mxManySkipKeep direction pSkip maxSkipCount p =
+let mxManySkipRetain direction pSkip maxSkipCount p =
     let skip = 
         mxManyWithMaxCount direction (Some maxSkipCount) pSkip 
 
@@ -528,21 +549,21 @@ let mxManySkipKeep direction pSkip maxSkipCount p =
             | None -> None
 
     ((mxMany direction piped))
-    |||> fun list ->
+    ||>> fun list ->
         ([], list) ||> List.fold (fun state (errors, values) ->
             state @ (List.map Result.Error errors) @ (List.map Result.Ok values)
         )
 
-let mxMany1SkipKeep direction pSkip maxSkipCount p =
+let private mxMany1SkipRetain direction pSkip maxSkipCount p =
     let many1 = mxMany1 direction p
 
-    pipe2 direction many1 (mxManySkipKeep direction pSkip maxSkipCount p) (fun (a,b) ->
+    pipe2 direction many1 (mxManySkipRetain direction pSkip maxSkipCount p) (fun (a,b) ->
         List.map Result.Ok a @ b
     )
 
 let mxManySkip direction pSkip maxSkipCount p =
-    mxMany1SkipKeep direction pSkip maxSkipCount p
-    |||> (List.choose (fun v ->
+    mxMany1SkipRetain direction pSkip maxSkipCount p
+    ||>> (List.choose (fun v ->
         match v with 
         | Result.Ok ok -> Some ok
         | Result.Error _ -> None
@@ -603,7 +624,7 @@ let mxUntilA maxCount (p: MatrixParser<'result>) =
     inDirection (fun direction ->
         mxUntil direction maxCount mxAnySkip p
     )
-    |||> snd
+    ||>> snd
 
 let mxUntilIND50 pPrevious (pLast: MatrixParser<'result>) = mxUntilIND (Some 50) pPrevious (pLast: MatrixParser<'result>)
 
@@ -614,14 +635,19 @@ let mxUntilA10 (p: MatrixParser<'result>) = mxUntilA (Some 10) p
 let mxUntilA5 (p: MatrixParser<'result>) = mxUntilA (Some 5) p 
 
 
+type MergeStarterResult =
+    { Address: string 
+      Text: string }
+
+
 let mxMergeStarter inputStream = 
-    mxCellParser pMergeStarter ExcelRangeBase.getText inputStream
+    mxCellParser pMergeStarter (fun range -> { Address = range.Address; Text = range.Text}) inputStream
     
 
 let mxMerge direction =
     pipe2Relatively direction mxMergeStarter (fun outputStream ->
         let workSheet = outputStream.Range.Worksheet
-        let mergeCellId = ExcelWorksheet.getMergeCellId outputStream.Range workSheet
+        let mergeCellId = ExcelWorksheet.getMergeCellId workSheet.Cells.[outputStream.Result.Value.Address] workSheet
         mxMany1 direction (mxCellParser (fun range -> ExcelWorksheet.getMergeCellId range workSheet = mergeCellId) ExcelRangeBase.getAddressOfRange)
     ) id
 
