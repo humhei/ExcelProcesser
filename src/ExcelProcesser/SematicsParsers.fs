@@ -121,7 +121,7 @@ let mxGroupingColumn (GroupingColumnParserArg(pChildHeader, pElementSkip, pEleme
 
             match pElementSkip with 
             | Some pElementSkip ->
-                rm ((mxManySkipRetain Direction.Horizontal pElementSkip columns pElementInRange) ||>> (List.mapi (fun i result ->
+                rm (inDebug(mxManySkipRetain Direction.Horizontal pElementSkip columns pElementInRange) ||>> (List.mapi (fun i result ->
                     match result with 
                     | Result.Ok ok -> Some (i,ok)
                     | Result.Error _ -> None
@@ -156,46 +156,52 @@ module TwoHeadersPivotTable =
             )
             (mxUntilA50 (pRightBorderHeader <&> mxMergeStarter))
 
-    let parse pLeftBorderHeader pNumberHeader pRightBorderHeader pGroupingColumn =
+    let parser pLeftBorderHeader pNumberHeader pRightBorderHeader pGroupingColumn =
         
         mxFrame pLeftBorderHeader pNumberHeader pRightBorderHeader
-        |> MatrixParser.mapOutputStream (fun outputStream ->
+        |> MatrixParser.collectOutputStream (fun outputStream ->
             let reranged = OutputMatrixStream.reRange outputStream
-            let resetedInputStream = 
-                { Range = reranged 
-                  Shift = Shift.Start }
-            let p = 
-                c2 
-                    (pLeftBorderHeader ||>> ignore)
-                    (mxUntilA50
-                        (inDebug(mxGroupingColumn pGroupingColumn))
-                    )
-                ||>> (snd >> fun groupingColumn ->
-                    let normalColumns =
-                        let array2D = 
-                            (reranged).Value :?> obj[,]
+            reranged
+            |> List.ofSeq
+            |> List.collect (fun range ->
+                let resetedInputStream = 
+                    { Range = range
+                      Shift = Shift.Start }
+                let p = 
+                    c2 
+                        (pLeftBorderHeader ||>> ignore)
+                        (mxUntilA50
+                            (inDebug(mxGroupingColumn pGroupingColumn))
+                        )
+                    ||>> (snd >> fun groupingColumn ->
+                        let normalColumns =
+                            let array2D = 
+                                (reranged).Value :?> obj[,]
 
-                        let exceptGroupingColumn array2D = 
-                            Array2D.pickHeaderTailColumnsNotIncludeByIndexer groupingColumn.Header.Indexer array2D
+                            let exceptGroupingColumn array2D = 
+                                Array2D.pickHeaderTailColumnsNotIncludeByIndexer groupingColumn.Header.Indexer array2D
             
-                        //let exceptSecondEmptyHeaderAndSummary =
-                        let newArray2D = 
-                            array2D
-                            |> exceptGroupingColumn
-                            |> Array2D.removeSencondRow
-                            |> Array2D.removeLastRow
+                            //let exceptSecondEmptyHeaderAndSummary =
+                            let newArray2D = 
+                                array2D
+                                |> exceptGroupingColumn
+                                |> Array2D.removeSencondRow
+                                |> Array2D.removeLastRow
 
-                        [
-                            for i = 0 to Array2D.length2 newArray2D - 1 do 
-                                let column = newArray2D.[*, i]
-                                yield
-                                    { Header = column.[0].ToString()
-                                      Contents = List.ofArray column.[1..]}
-                        ]
-                    { GroupingColumn = groupingColumn 
-                      NormalColumns = normalColumns }
+                            [
+                                for i = 0 to Array2D.length2 newArray2D - 1 do 
+                                    let column = newArray2D.[*, i]
+                                    yield
+                                        { Header = column.[0].ToString()
+                                          Contents = List.ofArray column.[1..]}
+                            ]
+                        { GroupingColumn = groupingColumn 
+                          NormalColumns = normalColumns }
+                    )
+                p resetedInputStream
 
-                )
-            p resetedInputStream
+            )
+    
+
         )
 

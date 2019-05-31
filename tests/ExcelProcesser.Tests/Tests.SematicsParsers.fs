@@ -39,7 +39,7 @@ let sematicsParsers =
         let results = 
             runMatrixParser 
                 worksheet 
-                (TwoHeadersPivotTable.parse 
+                (TwoHeadersPivotTable.parser 
                     (mxStyleName "Border") 
                     (mxStyleName "Number") 
                     (mxStyleName "Border")

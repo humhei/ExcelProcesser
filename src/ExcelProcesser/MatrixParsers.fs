@@ -271,26 +271,34 @@ module OutputMatrixStream =
 [<RequireQualifiedAccess>]
 type MatrixStream<'result> =
     | Input of InputMatrixStream
-    | Output of OutputMatrixStream<'result>
+    | Output of OutputMatrixStream<'result> list
 
 
-type MatrixParser<'result> = InputMatrixStream -> OutputMatrixStream<'result> option
+
+type MatrixParser<'result> = InputMatrixStream -> OutputMatrixStream<'result> list
+
+[<RequireQualifiedAccess>]
+module List =
+    let (|Some|None|) (list: 'a list) = 
+        if list.Length = 0 then None
+        else Some list
 
 [<RequireQualifiedAccess>]
 module MatrixParser =
-    let mapOutputStream f p : MatrixParser<_> =
+    let mapOutputStream f p =
         fun (inputStream: InputMatrixStream) ->
-            let (outputStream: OutputMatrixStream<'result> option) = p inputStream
-            match outputStream with 
-            | Some outputStream ->
-                f outputStream
-            | None -> None
+            let (outputStreams: OutputMatrixStream<'result> list) = p inputStream
+            List.map f outputStreams
+
+    let collectOutputStream f p : MatrixParser<_> =
+        fun (inputStream: InputMatrixStream) ->
+            let (outputStreams: OutputMatrixStream<'result> list) = p inputStream
+            List.collect f outputStreams
 
     let filterOutputStreamByResultValue f p =
-        mapOutputStream (fun outputStream ->
-            if f outputStream.Result.Value then Some outputStream
-            else None
-        ) p
+        fun (inputStream: InputMatrixStream) ->
+            let (outputStreams: OutputMatrixStream<'result> list) = p inputStream
+            List.filter (fun outputStream -> f outputStream.Result.Value) outputStreams
 
 let mxCellParserOp (cellParser: ExcelRangeBase -> 'result option) =
     fun (stream: InputMatrixStream) ->
@@ -298,14 +306,15 @@ let mxCellParserOp (cellParser: ExcelRangeBase -> 'result option) =
         match cellParser offsetedRange with 
         | Some result ->
 
-            Some 
+            [
                 { Range = stream.Range 
                   Shift = stream.Shift 
                   Result = 
                     { RelativeShift = RelativeShift.Start
                       Value = result }
                 }
-        | None -> None
+            ]
+        | None -> []
 
 let mxCellParser (cellParser: CellParser) getResult =
     fun range ->
@@ -337,13 +346,11 @@ let mxAnyOrigin inputStream =
     mxCellParser pAny ExcelRangeBase.getText inputStream
 
 let (||>>) p f = 
-    MatrixParser.mapOutputStream (fun outputStream ->
-       Some (OutputMatrixStream.mapResultValue f outputStream) 
-    ) p
+    MatrixParser.mapOutputStream (fun outputStream -> OutputMatrixStream.mapResultValue f outputStream) p
 
 let (|||>>) p f = 
     MatrixParser.mapOutputStream (fun outputStream ->
-       Some (OutputMatrixStream.mapResultValue (f (outputStream)) outputStream) 
+       OutputMatrixStream.mapResultValue (f (outputStream)) outputStream
     ) p
 
 
@@ -356,72 +363,78 @@ let mxOR (p1: MatrixParser<'result1>) (p2: MatrixParser<'result2>) =
 
     fun inputStream ->
         match p1 inputStream with
-        | Some outputStream ->
-            Some outputStream
-        | None -> p2 inputStream
-
+        | List.Some streams -> streams
+        | _ -> p2 inputStream
 
 
 /// p1 && not p2
 let (<&!>) (p1: MatrixParser<'result>) (p2: MatrixParser<'exclude>) = 
     fun inputStream ->
         match p2 inputStream with 
-        | Some _ -> None
-        | None -> p1 inputStream
+        | List.Some _ -> []
+        | _ -> p1 inputStream
 
 let (<&>) (p1: MatrixParser<'result>) (p2: MatrixParser<'predicate>) = 
     fun inputStream ->
         match p1 inputStream with 
-        | Some outputStream1 -> 
+        | List.Some outputStreams1 -> 
             match p2 inputStream with 
-            | Some _ -> Some outputStream1
-            | None -> None
-        | None -> None
+            | List.Some _ -> outputStreams1
+            | List.None -> []
+        | List.None -> []
 
 
 let internal inDebug p =
     fun inputStream -> 
         let m = p inputStream
         match m with 
-        | Some m -> 
-            Some m
-        | None -> None
+        | List.Some m -> 
+            m
+        | List.None -> []
 
-let pipe2RelativelyWithTupleStreamsRetrun (direction: Direction) (p1: MatrixParser<'result1>) (buildP2: OutputMatrixStream<'result1> -> MatrixParser<'result2>) f =
+let pipe2RelativelyWithTupleStreamsReturn (direction: Direction) (p1: MatrixParser<'result1>) (buildP2: OutputMatrixStream<'result1> -> MatrixParser<'result2>) f =
 
     fun inputstream1 ->
 
-        let newStream1 = p1 inputstream1
-        match newStream1 with 
-        | Some newStream1 ->
-            let p2 = buildP2 newStream1
-            let inputStream2 = (OutputMatrixStream.applyDirectionToShift direction newStream1).AsInputStream
+        let newStreams1 = p1 inputstream1
+        match newStreams1 with 
+        | List.Some newStreams1 ->
             
-            match p2 inputStream2 with 
-            | Some newStream20 ->
-                let newStream21 =
-                    OutputMatrixStream.mapResult (fun result2 -> 
-                        { RelativeShift = RelativeShift.plus direction newStream1.Result.RelativeShift result2.RelativeShift
-                          Value = f (newStream1.Result.Value, result2.Value) }
-                    ) newStream20
+            newStreams1
+            |> List.collect (fun newStream1 ->
+                let p2 = buildP2 newStream1
+                let inputStream2 = (OutputMatrixStream.applyDirectionToShift direction newStream1).AsInputStream
+                match p2 inputStream2 with 
+                | List.Some newStreams2 ->
+                    List.map (
+                        fun newStream2 ->
+                            let stream2RelativeShift = newStream2.Result.RelativeShift
+                            let stream2ResultValue = newStream2.Result.Value
 
-                let newStream22 = 
-                    { newStream21 with 
-                        Shift = 
-                            match newStream20.Result.RelativeShift with 
-                            | RelativeShift.Skip -> newStream1.Shift 
-                            | _ -> newStream21.Shift }
+                            let newStream2 = 
+                                { Range = newStream2.Range
+                                  Result = 
+                                      { RelativeShift = RelativeShift.plus direction newStream1.Result.RelativeShift stream2RelativeShift
+                                        Value = f (newStream1.Result.Value, stream2ResultValue) }
+                                  Shift = 
+                                      match stream2RelativeShift with 
+                                      | RelativeShift.Skip -> newStream1.Shift 
+                                      | _ -> newStream2.Shift }
 
-                (newStream1, newStream22)
-                |> Some
+                            newStreams1, newStream2
 
-            | None -> None
-        | None -> None
+                    ) newStreams2
+
+                | List.None -> []
+            )
+            
+        | List.None -> []
+        
 
 
 let pipe2Relatively (direction: Direction) (p1: MatrixParser<'result1>) (buildP2: OutputMatrixStream<'result1> -> MatrixParser<'result2>) f =
-    pipe2RelativelyWithTupleStreamsRetrun direction p1 buildP2 f
-    >> Option.map snd
+    pipe2RelativelyWithTupleStreamsReturn direction p1 buildP2 f
+    >> List.map snd
     
 
 let pipe2 direction p1 p2 f = 
@@ -434,85 +447,100 @@ let pipe3 direction p1 p2 p3 f =
 
 let private atLeastOne (p: MatrixParser<'a list>) =
     p
-    |> MatrixParser.mapOutputStream (fun outputStream ->
-        if outputStream.Result.Value.IsEmpty then None
-        else Some outputStream
+    |> MatrixParser.filterOutputStreamByResultValue (fun list ->
+        not list.IsEmpty
     )
 
 let private atLeastTwo (p: MatrixParser<'a list>) =
     p
-    |> MatrixParser.mapOutputStream (fun outputStream ->
-        if outputStream.Result.Value.Length > 1 then None
-        else Some outputStream
+    |> MatrixParser.filterOutputStreamByResultValue (fun list ->
+        list.Length > 1
     )
 
 let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result>) = 
-    
+    let isSkip outputStream = 
+        outputStream.Result.RelativeShift = RelativeShift.Skip
+
     fun inputStream ->
-        let rec loop stream (accum: OutputMatrixStream<'result> list) =
+        let rec loop stream (accum: OutputMatrixStream<'result> list) = [
             let isReachMaxCount =
                 match maxCount with 
                 | Some maxCount -> 
                     accum.Length >= maxCount
                 | None -> false
 
-            if isReachMaxCount then accum
+            if isReachMaxCount then yield accum
             else
                 match stream with
                 | MatrixStream.Input inputStream ->
                     match p inputStream with 
-                    | Some outputStream ->
-                        match outputStream.Result.RelativeShift with 
-                        | RelativeShift.Skip -> 
-                            accum
-                        | _ ->
-                            loop (MatrixStream.Output outputStream) (outputStream :: accum) 
-                    | None -> accum
+                    | List.Some outputStreams ->
+                        let skip, outputStreams = List.partition isSkip outputStreams 
+                        yield! List.replicate skip.Length []
 
-                | MatrixStream.Output outputStream1 ->
-                    let inputStream = (OutputMatrixStream.applyDirectionToShift direction outputStream1).AsInputStream
+                        yield! loop (MatrixStream.Output outputStreams) (accum @ outputStreams) 
 
-                    match p inputStream with 
-                    | Some outputStream2 ->
-                        match outputStream2.Result.RelativeShift with 
-                        | RelativeShift.Skip -> accum
-                        | _ ->
-                            let newOutputStream = 
-                                OutputMatrixStream.mapResult (fun result2 -> 
-                                    { RelativeShift = RelativeShift.plus direction outputStream1.Result.RelativeShift result2.RelativeShift
-                                      Value = result2.Value }
-                                ) outputStream2
-                            loop (MatrixStream.Output newOutputStream) (newOutputStream :: accum)
+                    | List.None -> yield []
 
-                    | None -> accum
+                | MatrixStream.Output outputStreams1 ->
+                    if outputStreams1.Length = 0 then yield accum
+                    else
+                        yield!
+                            outputStreams1
+                            |> List.collect (fun outputStream1 -> [
+                                let inputStream = (OutputMatrixStream.applyDirectionToShift direction outputStream1).AsInputStream
+                                match p inputStream with 
+                                | List.Some outputStreams2 ->
+                                    let skip, outputStreams2 = List.partition isSkip outputStreams2
+
+                                    yield! List.replicate skip.Length []
+
+                                    let outputStreams2 = 
+                                        outputStreams2
+                                        |> List.map (fun outputStream2 ->
+                                            OutputMatrixStream.mapResult (fun result2 -> 
+                                                { RelativeShift = RelativeShift.plus direction outputStream1.Result.RelativeShift result2.RelativeShift
+                                                  Value = result2.Value }
+                                            ) outputStream2
+                                        )
+
+                                    yield! loop (MatrixStream.Output outputStreams2) (accum @ outputStreams2)
+
+                                | List.None ->  yield accum
+                            ]
+                            )
+        ]
 
 
-        let outputStreams = loop (MatrixStream.Input inputStream) []
-        match outputStreams with 
-        | h :: t ->
-            { Range = h.Range 
-              Shift = h.Shift 
-              Result = 
-                { RelativeShift = h.Result.RelativeShift
-                  Value = 
-                    outputStreams 
-                    |> List.map (fun outputStream ->
-                          outputStream.Result.Value 
-                    )
-                    |> List.rev
+
+        let outputStreamLists = loop (MatrixStream.Input inputStream) []
+        outputStreamLists 
+        |> List.map (fun outputStreams ->
+            match outputStreams with 
+            | _ :: _ ->
+                let last = List.last outputStreams
+                { Range = last.Range 
+                  Shift = last.Shift 
+                  Result = 
+                    { RelativeShift = last.Result.RelativeShift
+                      Value = 
+                        outputStreams 
+                        |> List.map (fun outputStream ->
+                              outputStream.Result.Value 
+                        )
+                    }
                 }
-            }
-            |> Some
 
-        | _ -> 
-            { Range = inputStream.Range
-              Shift = inputStream.Shift
-              Result = 
-                { RelativeShift = RelativeShift.Skip
-                  Value = []
+            | _ -> 
+                { Range = inputStream.Range
+                  Shift = inputStream.Shift
+                  Result = 
+                    { RelativeShift = RelativeShift.Skip
+                      Value = []
+                    }
                 }
-            }
-            |> Some
+        )
+
 
 let mxMany1WithMaxCount direction (maxCount: int option) (p: MatrixParser<'result>) =
     mxManyWithMaxCount direction maxCount p
@@ -540,13 +568,15 @@ let mxManySkipRetain direction pSkip maxSkipCount p =
     let piped = 
         fun (inputstream: InputMatrixStream) ->
             //None
-            let outputStream = pipe2 direction skip many1 id inputstream
-            match outputStream with 
-            | Some outputStream ->
-                let errors, values = outputStream.Result.Value
-                if values.Length = 0 then None
-                else Some outputStream
-            | None -> None
+            let outputStreams = pipe2 direction skip many1 id inputstream
+            match outputStreams with 
+            | List.Some outputStreams ->
+                outputStreams
+                |> List.filter (fun outputStream ->
+                    let errors, values = outputStream.Result.Value
+                    values.Length > 0
+                )
+            | List.None -> []
 
     ((mxMany direction piped))
     ||>> fun list ->
@@ -554,12 +584,14 @@ let mxManySkipRetain direction pSkip maxSkipCount p =
             state @ (List.map Result.Error errors) @ (List.map Result.Ok values)
         )
 
+/// alaways backtrack
 let private mxMany1SkipRetain direction pSkip maxSkipCount p =
     let many1 = mxMany1 direction p
 
     pipe2 direction many1 (mxManySkipRetain direction pSkip maxSkipCount p) (fun (a,b) ->
         List.map Result.Ok a @ b
-    )
+    ) 
+
 
 let mxManySkip direction pSkip maxSkipCount p =
     mxMany1SkipRetain direction pSkip maxSkipCount p
@@ -599,19 +631,19 @@ let mxUntil direction maxCount pPrevious (pLast: MatrixParser<'result>) =
    
 
 let mxUntilBacktrackLast direction maxCount pPrevious (pLast: MatrixParser<'result>) =
-    pipe2RelativelyWithTupleStreamsRetrun direction (mxManyWithMaxCount direction maxCount (pPrevious <&!> pLast)) (fun _ -> pLast) id
-    >> Option.map fst
+    pipe2RelativelyWithTupleStreamsReturn direction (mxManyWithMaxCount direction maxCount (pPrevious <&!> pLast)) (fun _ -> pLast) id
+    >> List.map fst
 
 let mxUntil1 direction maxCount pPrevious (pLast: MatrixParser<'result>) =
     pipe2 direction (mxMany1WithMaxCount direction maxCount (pPrevious <&!> pLast)) pLast id
 
 let mxUntil1BacktrackLast direction maxCount pPrevious (pLast: MatrixParser<'result>) =
-    pipe2RelativelyWithTupleStreamsRetrun direction (mxMany1WithMaxCount direction maxCount (pPrevious <&!> pLast)) (fun _ -> pLast) id
-    >> Option.map fst
+    pipe2RelativelyWithTupleStreamsReturn direction (mxMany1WithMaxCount direction maxCount (pPrevious <&!> pLast)) (fun _ -> pLast) id
+    >> List.map fst
 
 let mxUntil2BacktrackLast direction maxCount pPrevious (pLast: MatrixParser<'result>) =
-    pipe2RelativelyWithTupleStreamsRetrun direction (mxMany2WithMaxCount direction maxCount (pPrevious <&!> pLast)) (fun _ -> pLast) id
-    >> Option.map fst
+    pipe2RelativelyWithTupleStreamsReturn direction (mxMany2WithMaxCount direction maxCount (pPrevious <&!> pLast)) (fun _ -> pLast) id
+    >> List.map fst
 
 /// IND = inDirection
 let mxUntilIND maxCount pPrevious (pLast: MatrixParser<'result>) =
@@ -680,11 +712,6 @@ let r3 p1 p2 p3 =
     pipe3 Direction.Vertical p1 p2 p3 id
 
 let runMatrixParserForRangesWithStreamsAsResult (ranges : seq<ExcelRangeBase>) (p : MatrixParser<_>) =
-    //let ranges = 
-    //    if Seq.length ranges = 1 
-    //    then ExcelRangeBase.asRanges (Seq.head ranges)
-    //    else List.ofSeq ranges
-
     let inputStreams = 
         ranges 
         |> List.ofSeq
@@ -694,7 +721,7 @@ let runMatrixParserForRangesWithStreamsAsResult (ranges : seq<ExcelRangeBase>) (
         )
 
     inputStreams 
-    |> List.choose p
+    |> List.collect p
 
 
 let runMatrixParserForRanges (ranges : seq<ExcelRangeBase>) (p : MatrixParser<_>) =
