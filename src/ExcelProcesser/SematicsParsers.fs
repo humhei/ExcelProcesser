@@ -121,7 +121,7 @@ let mxGroupingColumn (GroupingColumnParserArg(pChildHeader, pElementSkip, pEleme
 
             match pElementSkip with 
             | Some pElementSkip ->
-                rm (inDebug(mxManySkipRetain Direction.Horizontal pElementSkip columns pElementInRange) ||>> (List.mapi (fun i result ->
+                rm ((mxManySkipRetain Direction.Horizontal pElementSkip columns pElementInRange) ||>> (List.mapi (fun i result ->
                     match result with 
                     | Result.Ok ok -> Some (i,ok)
                     | Result.Error _ -> None
@@ -168,12 +168,12 @@ module TwoHeadersPivotTable =
                     { Range = range
                       Shift = Shift.Start }
                 let p = 
-                    c2 
-                        (pLeftBorderHeader ||>> ignore)
+                    c3 
+                        ((pLeftBorderHeader <&> mxMergeStarter) ||>> ignore)
                         (mxUntilA50
-                            (inDebug(mxGroupingColumn pGroupingColumn))
-                        )
-                    ||>> (snd >> fun groupingColumn ->
+                            ((mxGroupingColumn pGroupingColumn)))
+                        (inDebug(mxUntilA50 (pRightBorderHeader <&> mxMergeStarter)) ||>> ignore)
+                    ||>> ((fun (_, b, _) -> b) >> fun groupingColumn ->
                         let normalColumns =
                             let array2D = 
                                 (reranged).Value :?> obj[,]
@@ -181,7 +181,6 @@ module TwoHeadersPivotTable =
                             let exceptGroupingColumn array2D = 
                                 Array2D.pickHeaderTailColumnsNotIncludeByIndexer groupingColumn.Header.Indexer array2D
             
-                            //let exceptSecondEmptyHeaderAndSummary =
                             let newArray2D = 
                                 array2D
                                 |> exceptGroupingColumn
@@ -201,7 +200,6 @@ module TwoHeadersPivotTable =
                 p resetedInputStream
 
             )
-    
 
         )
 

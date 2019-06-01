@@ -103,13 +103,21 @@ let matrixTests =
         let results = 
             runMatrixParser 
                 worksheet 
-                (c3 
-                    (mxText "Cross_1A") 
-                    (r3 (mxText "Cross_1B") (mxText "Cross_1C") (mxText "Cross_1D"))
-                    (mxText "Cross_1E")
+                (r2
+                    (r3
+                        (c3 
+                            (mxText "Cross_1A") 
+                            (r2 (mxText "Cross_1B") (c2 (mxText "Cross_1C") (mxText "Cross_1D")))
+                            (mxText "Cross_1E")
+                        )
+                        (mxText "Cross_1F")
+                        (c2 (mxText "Cross_1G") (mxText "Cross_1H"))
+                    )
+                    (mxText "Cross_1I")
                 )
+        //pass()
         match results with 
-        | [("Cross_1A",("Cross_1B", "Cross_1C", "Cross_1D"),"Cross_1E")] -> pass()
+        | [(("Cross_1A",("Cross_1B", ("Cross_1C", "Cross_1D")),"Cross_1E"),"Cross_1F",("Cross_1G","Cross_1H")),"Cross_1I"] -> pass()
         | _ -> fail()
 
     testCase "cross area2" <| fun _ -> 
@@ -126,6 +134,25 @@ let matrixTests =
                 )
         match results with 
         | [("Cross_2A",("Cross_2B", "Cross_2C", ("Cross_2D","Cross_2E")))] -> pass()
+        | _ -> fail()
+
+    ftestCase "cross area3" <| fun _ -> 
+        let results = 
+            runMatrixParser 
+                worksheet 
+                    (r2 
+                        (mxText "Cross_3A") 
+                        (c3 
+                            (mxText "Cross_3B") 
+                            (r2 
+                                (mxText "Cross_3C") 
+                                (fun a -> c2 (mxText "Cross_3D" ) (mxText "Cross_3E") a)
+                            )
+                            (fun a -> mxText "Cross_3F" a)
+                        ))
+
+        match results with
+        | [("Cross_3A", ("Cross_3B", ("Cross_3C", ("Cross_3D","Cross_3E")),"Cross_3F"))] -> pass()
         | _ -> fail()
 
     testCase "column many" <| fun _ -> 
@@ -180,10 +207,17 @@ let matrixTests =
         let results = 
             runMatrixParserForRangesWithStreamsAsResult  
                 userRange
-                (c3 
-                    (mxText "Cross_1A") 
-                    (r3 (mxText "Cross_1B") (mxText "Cross_1C") (mxText "Cross_1D"))
-                    (mxText "Cross_1E")
+                (r2
+                    (r3
+                        (c3 
+                            (mxText "Cross_1A") 
+                            (r2 (mxText "Cross_1B") (c2 (mxText "Cross_1C") (mxText "Cross_1D")))
+                            (mxText "Cross_1E")
+                        )
+                        (mxText "Cross_1F")
+                        (c2 (mxText "Cross_1G") (mxText "Cross_1H"))
+                    )
+                    (mxText "Cross_1I")
                 )
         results 
         |> List.map (OutputMatrixStream.reRange >> (fun range -> 
@@ -192,7 +226,7 @@ let matrixTests =
             |> List.distinct
         ))
         |> function
-            | ["Cross_1A"; "Cross_1B";"Cross_1E";"Cross_1C";"Cross_1D"] :: _ -> pass()
+            | ["Cross_1A"; "Cross_1B";"Cross_1E";"Cross_1F";"Cross_1C";"Cross_1D";"Cross_1G";"Cross_1H";"Cross_1I"] :: _ -> pass()
             | _ -> fail()
 
     testCase "cross area2 reRange" <| fun _ -> 

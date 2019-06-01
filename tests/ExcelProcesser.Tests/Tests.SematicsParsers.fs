@@ -7,6 +7,7 @@ open FParsec
 open OfficeOpenXml
 open System.IO
 open SematicsParsers
+open ExcelProcesser.Extensions
 
 let pass() = Expect.isTrue true "passed"
 let fail() = Expect.isTrue false "failed"
@@ -36,9 +37,13 @@ let sematicsParsers =
         | _ -> fail()
 
     testCase "twoRowHeaderPivotTable frame" <| fun _ -> 
+        let userRange = 
+            worksheet
+            |> ExcelWorksheet.getUserRange
+
         let results = 
-            runMatrixParser 
-                worksheet 
+            runMatrixParserForRangesWithStreamsAsResult
+                userRange 
                 (TwoHeadersPivotTable.parser 
                     (mxStyleName "Border") 
                     (mxStyleName "Number") 
@@ -46,11 +51,7 @@ let sematicsParsers =
                     (GroupingColumnParserArg(mxFParsec pint32, Some mxSpace, mxFParsec pint32))
                 )
         
-        pass()
-        //match results with 
-        //| ["ORDER NO.",("Pairs",([2040;980;96;96;96;96;96],3500)), "Volume"] -> pass()
-        //| _ -> fail()
-
+        Expect.equal results.Length 1 "pass"
 
 
   ]
