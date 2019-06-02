@@ -15,25 +15,41 @@ let excelPackage = new ExcelPackage(FileInfo(XLPath.testData))
 
 let worksheet = excelPackage.Workbook.Worksheets.["Matrix"]
 
+let shiftTests =
+  testList "ShiftTests" [
+
+    testCase "start + Horizontal ({X = 0; Y = 0;},1) + Direction.Horizontal = Horizontal {0,0},2" <| fun _ -> 
+        let shift = 
+            let shift = Horizontal ({X = 0; Y = 0;},1)
+            Shift.applyDirection (Start) Direction.Horizontal shift
+        match shift.Last with 
+        | Horizontal({X = 0; Y = 0},2) -> pass()
+        | _ -> fail()
+
+    testCase "start + Vertical ({X = 0; Y = 0;},1) + Direction.Vertical = Vertical {0,0},2" <| fun _ -> 
+        let shift = 
+            let shift = Vertical ({X = 0; Y = 0;},1)
+            Shift.applyDirection (Start) Direction.Vertical shift
+        match shift.Last with 
+        | Vertical({X = 0; Y = 0},2) -> pass()
+        | _ -> fail()
+
+    ptestCase "start + [Horizontal ({X = 0; Y = 0;},1);Vertical {1,0} 1;Horizontal {1,1} 1] => Horizontal {1,0},1" <| fun _ -> 
+        let shift = 
+            let shift = Compose [Horizontal ({X = 0; Y = 0;},1);Vertical({X = 1; Y =0},1) ;Horizontal({X=1; Y =1},1)]
+            Shift.applyDirection (Start) Direction.Horizontal shift
+        match shift.Last with 
+        | Horizontal({X = 1; Y = 0},1) -> pass()
+        | _ -> fail()
+
+  ]
+
 let matrixTests =
   testList "MatrixTests" [
     testCase "mxText" <| fun _ -> 
         let results = runMatrixParser worksheet (mxText "mxTextA")
         match results with 
         | ["mxTextA"] -> pass()
-        | _ -> fail()
-
-    testCase "mxMergeStarter" <| fun _ -> 
-        let results = runMatrixParser worksheet (mxMergeStarter ||>> fun mergeStarter -> mergeStarter.Text)
-        match results with 
-        | "Merge1" :: "Merge2":: _ -> pass()
-        | _ -> fail()
-
-    testCase "mxMerge horizontal" <| fun _ -> 
-        let results = 
-            runMatrixParser worksheet ((mxMerge Direction.Horizontal) ||>> fun (mergeStarter ,_) -> mergeStarter.Text)
-        match results with 
-        | ["Merge1"; "Merge2"] -> pass()
         | _ -> fail()
 
     testCase "mxOR" <| fun _ -> 
@@ -80,7 +96,7 @@ let matrixTests =
         let results = 
             runMatrixParser 
                 worksheet 
-                (c2 (mxText "C2_R2A") (r2 (mxText "C2_R2B") (mxText "C2_R2C")))
+                (c2 (mxText "C2_R2A") (r2 (fun a -> mxText "C2_R2B" a) (mxText "C2_R2C")))
 
         match results with 
         | [("C2_R2A"), ("C2_R2B", "C2_R2C")] -> pass()
@@ -99,7 +115,53 @@ let matrixTests =
         | [(("C2_R3A", "C2_R3B", "C2_R3C"),"C2_R3D")] -> pass()
         | _ -> fail()
 
-    testCase "cross area1" <| fun _ -> 
+    testCase "cross area1 - 1" <| fun _ -> 
+        let results = 
+            runMatrixParser 
+                worksheet 
+                    (r2 (mxText "Cross_1B") (c2 (mxText "Cross_1C") (mxText "Cross_1D")))
+                
+        //pass()
+        match results with 
+        | [(("Cross_1B", ("Cross_1C", "Cross_1D")))] -> pass()
+        | _ -> fail()
+
+    testCase "cross area1 - 2" <| fun _ -> 
+        let results = 
+            runMatrixParser 
+                worksheet 
+                    (c3 
+                        (mxText "Cross_1A") 
+                        (r2 (mxText "Cross_1B") (c2 (mxText "Cross_1C") (mxText "Cross_1D")))
+                        (fun a -> mxText "Cross_1E" a)
+                    )
+                
+        //pass()
+        match results with 
+        | [(("Cross_1A",("Cross_1B", ("Cross_1C", "Cross_1D")),"Cross_1E"))] -> pass()
+        | _ -> fail()
+
+    testCase "cross area1 - 3" <| fun _ -> 
+        let results = 
+            runMatrixParser 
+                worksheet 
+                    (r3
+                        (c3 
+                            (mxText "Cross_1A") 
+                            (r2 (mxText "Cross_1B") (c2 (mxText "Cross_1C") (mxText "Cross_1D")))
+                            (mxText "Cross_1E")
+                        )
+                        (fun a -> mxText "Cross_1F" a)
+                        (fun a -> c2 (mxText "Cross_1G") (mxText "Cross_1H") a)
+                    )
+                
+        //pass()
+        match results with 
+        | [(("Cross_1A",("Cross_1B", ("Cross_1C", "Cross_1D")),"Cross_1E"),"Cross_1F",("Cross_1G","Cross_1H"))] -> pass()
+        | _ -> fail()
+
+
+    testCase "cross area1 - 4" <| fun _ -> 
         let results = 
             runMatrixParser 
                 worksheet 
@@ -136,7 +198,7 @@ let matrixTests =
         | [("Cross_2A",("Cross_2B", "Cross_2C", ("Cross_2D","Cross_2E")))] -> pass()
         | _ -> fail()
 
-    ftestCase "cross area3" <| fun _ -> 
+    testCase "cross area3" <| fun _ -> 
         let results = 
             runMatrixParser 
                 worksheet 
@@ -154,6 +216,26 @@ let matrixTests =
         match results with
         | [("Cross_3A", ("Cross_3B", ("Cross_3C", ("Cross_3D","Cross_3E")),"Cross_3F"))] -> pass()
         | _ -> fail()
+
+    testCase "cross area4" <| fun _ -> 
+        let results = 
+            runMatrixParser 
+                worksheet 
+                    (r2 
+                        (mxText "Cross_3A") 
+                        (c3 
+                            (mxText "Cross_3B") 
+                            (r2 
+                                (mxText "Cross_3C") 
+                                (fun a -> c2 (mxText "Cross_3D" ) (mxText "Cross_3E") a)
+                            )
+                            (fun a -> mxText "Cross_3F" a)
+                        ))
+
+        match results with
+        | [("Cross_3A", ("Cross_3B", ("Cross_3C", ("Cross_3D","Cross_3E")),"Cross_3F"))] -> pass()
+        | _ -> fail()
+
 
     testCase "column many" <| fun _ -> 
         let results = 
@@ -252,4 +334,18 @@ let matrixTests =
             | ["Cross_2A"; "Cross_2B";"Cross_2C";"Cross_2D";"Cross_2E"] :: _ -> pass()
             | _ -> fail()
 
+    testCase "mxMergeStarter" <| fun _ -> 
+        let results = runMatrixParser worksheet (mxMergeStarter ||>> fun mergeStarter -> mergeStarter.Text)
+        match results with 
+        | "Merge1" :: "Merge2":: _ -> pass()
+        | _ -> fail()
+
+    testCase "mxMerge horizontal" <| fun _ -> 
+        let results = 
+            runMatrixParser worksheet ((mxMerge Direction.Horizontal) ||>> fun (mergeStarter ,_) -> mergeStarter.Text)
+        match results with 
+        | ["Merge1"; "Merge2"] -> pass()
+        | _ -> fail()
+
   ]
+

@@ -14,6 +14,7 @@ let testConfig =
 
 let liteDbTests = 
     testList "All tests" [  
+        shiftTests
         matrixTests
         mathTests
         sematicsParsers 

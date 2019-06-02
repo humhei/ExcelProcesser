@@ -17,79 +17,6 @@ type Coordinate =
 module Coordinate =
     let origin = { X = 0; Y = 0 } 
 
-
-[<RequireQualifiedAccess>]
-type RelativeShift =
-    | Skip
-    | Start
-    | Vertical of int
-    | Horizontal of int
-
-[<RequireQualifiedAccess>]
-module RelativeShift =
-    let getNumber = function 
-        | RelativeShift.Skip -> 0
-        | RelativeShift.Start -> 1
-        | RelativeShift.Horizontal i -> i
-        | RelativeShift.Vertical i -> i
-
-
-    let plus direction shift1 shift2 =
-        match shift1, shift2 with 
-        | RelativeShift.Skip, _ -> shift2
-        | _, RelativeShift.Skip -> shift1
-        | RelativeShift.Start, RelativeShift.Start -> 
-            match direction with 
-            | Direction.Horizontal -> RelativeShift.Horizontal 2
-            | Direction.Vertical -> RelativeShift.Vertical 2
-            | _ -> failwith "Invalid token"
-
-        | RelativeShift.Start, RelativeShift.Horizontal i -> 
-            match direction with 
-            | Direction.Horizontal -> RelativeShift.Horizontal (i + 1)
-            | Direction.Vertical -> RelativeShift.Horizontal i
-            | _ -> failwith "Invalid token"
-
-        | RelativeShift.Start, RelativeShift.Vertical i ->
-            match direction with 
-            | Direction.Horizontal -> RelativeShift.Vertical(i)
-
-            | Direction.Vertical ->
-                RelativeShift.Vertical (i + 1)
-
-            | _ -> failwith "Invalid token"
-
-
-        | RelativeShift.Horizontal i, RelativeShift.Start -> 
-            match direction with 
-            | Direction.Horizontal -> RelativeShift.Horizontal (i + 1)
-            | Direction.Vertical -> RelativeShift.Vertical 1
-            | _ -> failwith "Invalid token"
-
-        | RelativeShift.Horizontal i, RelativeShift.Horizontal j -> 
-            match direction with 
-            | Direction.Horizontal -> RelativeShift.Horizontal (i + j)
-            | Direction.Vertical -> RelativeShift.Horizontal j
-            | _ -> failwith "Invalid token"
-
-        | RelativeShift.Horizontal i, RelativeShift.Vertical j -> RelativeShift.Vertical j
-
-        | RelativeShift.Vertical i, RelativeShift.Start -> 
-            match direction with 
-            | Direction.Horizontal -> RelativeShift.Horizontal 1
-
-            | Direction.Vertical ->
-                RelativeShift.Vertical (i + 1)
-
-            | _ -> failwith "Invalid token"
-
-        | RelativeShift.Vertical i, RelativeShift.Horizontal j -> RelativeShift.Horizontal j
-        | RelativeShift.Vertical i, RelativeShift.Vertical j -> 
-            match direction with 
-            | Direction.Horizontal -> RelativeShift.Vertical j
-            | Direction.Vertical -> RelativeShift.Vertical (i + j)
-            | _ -> failwith "Invalid token"
-
 type Shift =
     | Start
     | Vertical of Coordinate * int
@@ -118,138 +45,164 @@ with
 
 [<RequireQualifiedAccess>]
 module Shift =
-
-    let rec getCoordinate = function
-        | Start -> Coordinate.origin
-        | Horizontal (coordinate, _) -> coordinate
-        | Vertical (coordinate, _) -> coordinate
-        | Compose shifts ->
-            match shifts with
-            | [] -> failwith "compose shifts cannot be empty after start"
-            | h :: t ->
-                getCoordinate h
-
-    let rec getShiftedCoordinate = function
-        | Start -> Coordinate.origin
-        | Horizontal (coordinate, i) -> { coordinate with X = coordinate.X + i}
-        | Vertical (coordinate, i) -> { coordinate with Y = coordinate.Y + i}
-        | Compose shifts ->
-            match shifts with
-            | [] -> failwith "compose shifts cannot be empty after start"
-            | h :: t ->
-                getCoordinate h
-
-    let applyDirection (preShift: Shift) (relativeShift: RelativeShift) (direction: Direction) shift = 
-        let rec loop shift = 
-            match relativeShift with 
-            | RelativeShift.Skip -> [shift]
-            | _ ->
-                let relativeShiftNumber = RelativeShift.getNumber relativeShift
-
-                match shift with
-                | Start ->
-                    match direction with 
-                    | Direction.Vertical ->
-                        [Vertical (Coordinate.origin, 1)]
-
-                    | Direction.Horizontal ->
-                        [Horizontal (Coordinate.origin, 1)]
-
-                    | _ -> failwith "Invalid token"
-
-                | Vertical (coordinate, i) -> 
-                    match direction with 
-                    | Direction.Vertical ->
-                        [Vertical (coordinate, i + 1)]
-
-                    | Direction.Horizontal ->
-                        [Horizontal({ coordinate with Y = coordinate.Y + i - relativeShiftNumber + 1 }, 1); Vertical(coordinate, i)]
-
-                    | _ -> failwith "Invalid token"
-
-                | Horizontal (coordinate, i) ->
-                    match direction with 
-                    | Direction.Vertical ->
-                        [Vertical({ coordinate with X = coordinate.X + i - relativeShiftNumber + 1}, 1); Horizontal(coordinate, i)]
-
-                    | Direction.Horizontal ->
-                        [Horizontal (coordinate, i + 1)]
-
-                    | _ -> failwith "Invalid token"
+    let rec length = function 
+        | Start -> 1
+        | Horizontal _ -> 1
+        | Vertical _ -> 1
+        | Compose shifts -> shifts |> List.sumBy length
 
 
-                | Compose (shifts) ->
-                    match shifts with
-                    | [] -> failwith "compose shifts cannot be empty after start"
-                    | h :: t ->
-                        (loop h @ t)
-        Compose(loop shift)
+    let isVertical = function
+        | Vertical _ -> true
+        | _ -> false
 
+    let isHorizontal = function 
+        | Horizontal _ -> true 
+        | _ -> false
 
-
-    let tryToRedirectToStart (preShift: Shift) (relativeShift: RelativeShift) (direction: Direction) shift =
-        match shift with 
-        | Shift.Start -> None
-        | _ ->
-            if preShift = shift then None
-            else
-                match preShift with 
-                | Shift.Start ->
+    let private redirect (preCalculatedCoordinate: Coordinate) (direction: Direction) (shifts: Shift list) =
+        if List.forall (fun shift -> length shift = 1) shifts then 
+            match direction with 
+            | Direction.Horizontal ->
+                let chooser shift =
                     match shift with 
-                    | Shift.Compose shifts ->
-                        match direction with 
-                        | Direction.Horizontal ->
-                            let intersectionIndex = 
-                                shifts
-                                |> List.tryFindIndexBack (function
-                                    | Vertical (coordinate, i) -> coordinate.Y = 0
-                                    | _ -> false
-                                ) 
-                            match intersectionIndex with 
-                            | Some intersectionIndex ->
+                    | Shift.Horizontal (coordinate,i) ->
+                        if coordinate.Y = preCalculatedCoordinate.Y then Some { coordinate with X = coordinate.X + i }
+                        else None
 
-                                let intersectionShift = 
-                                    let coordinate = getCoordinate shifts.[intersectionIndex]
-                                    Horizontal (coordinate, 0)
-
-                                Compose 
-                                    (
-                                        [ intersectionShift
-                                          Compose shifts
-                                          Horizontal (Coordinate.origin, 0)]
-                                    )
-                                |> Some
-                            | None  -> None
-                        | Direction.Vertical -> 
-
-                            let intersectionIndex = 
-                                shifts
-                                |> List.tryFindIndexBack (function
-                                    | Horizontal (coordinate, i) -> coordinate.X = 0
-                                    | _ -> false
-                                ) 
-
-                            match intersectionIndex with 
-                            | Some intersectionIndex ->
-
-                                let intersectionShift = 
-                                    let coordinate = getCoordinate shifts.[intersectionIndex]
-                                    Vertical (coordinate, 0)
-
-
-                                Compose 
-                                    (
-                                        [ intersectionShift
-                                          Compose shifts
-                                          Vertical (Coordinate.origin, 0)]
-                                    )
-                                |> Some
-                            | None -> None
-
-                        | _ -> None
+                    | Shift.Vertical (coordinate,i) ->
+                        if coordinate.Y = preCalculatedCoordinate.Y then Some coordinate
+                        else None
                     | _ -> None
-                | _ ->
-                    None
+
+                match List.tryPick chooser shifts with 
+                | Some coordinate ->
+                    Compose (Horizontal (coordinate,1) :: shifts)
+                | None ->
+                    failwith "not implemented"
+
+            | Direction.Vertical ->
+                let chooser shift =
+                    match shift with 
+                    | Shift.Horizontal (coordinate,i) ->
+                        if coordinate.X = preCalculatedCoordinate.X then Some coordinate
+                        else None
+                    | Shift.Vertical (coordinate, i) ->
+                        if coordinate.X = preCalculatedCoordinate.X then Some {coordinate with Y = coordinate.Y + i}
+                        else None
+                    | _ -> None
+
+                match List.tryPick chooser shifts with 
+                | Some coordinate ->
+                    Compose (Vertical (coordinate, 1) :: shifts)
+                | None ->
+                    failwith "not implemented"
+            | _ -> failwith "Invalid token"
+        else
+            failwith ""
+
+    let rec applyDirection (preShift: Shift) (direction: Direction) shift: Shift =
+        match preShift, shift with 
+        | Start, Start ->
+            match direction with 
+            | Direction.Horizontal -> Horizontal (Coordinate.origin, 1)
+            | Direction.Vertical -> Vertical (Coordinate.origin, 1)
+            | _ -> failwith "Invalid token"
+        | Start, Horizontal (coordinate, i) ->
+            match direction with 
+            | Direction.Horizontal -> Horizontal (coordinate, i + 1)
+            | Direction.Vertical -> 
+                if coordinate = Coordinate.origin then 
+                    Vertical ({ X = 0; Y = 0},1)
+                else failwith "not implemented"
+            | _ -> failwith "Invalid token"
+
+        | Start, Vertical (coordinate, i) ->
+            match direction with 
+            | Direction.Horizontal -> 
+                if coordinate = Coordinate.origin then 
+                    Horizontal ({ X = 0; Y = 0},1)
+                else failwith ""
+            | Direction.Vertical -> Vertical (coordinate, i + 1)
+            | _ -> failwith "Invalid token"
+
+        | Horizontal (coordinate1, i1), Horizontal (coordinate2, i2) ->
+            match direction with 
+            | Direction.Horizontal -> 
+                if coordinate1 = coordinate2 then
+                    Horizontal (coordinate1, i2 + 1)
+                else failwith "not implemented"
+            | Direction.Vertical ->
+                if coordinate1 = coordinate2 then
+                    Compose [Vertical ({X = coordinate1.X + i1; Y = coordinate1.Y},1);shift]
+                else failwith ""
+            | _ -> failwith "Invalid token"
+
+        | Vertical (coordinate1, i1), Vertical (coordinate2, i2) ->
+            match direction with 
+            | Direction.Horizontal -> 
+                if coordinate1 = coordinate2 then
+                    Compose [Horizontal ({X = coordinate1.X; Y = coordinate1.Y + i1},1);shift]
+                else failwith "not implemented"
+            | Direction.Vertical ->
+                if coordinate1 = coordinate2 then
+                    Vertical (coordinate1, i2 + 1)
+                else failwith "not implemented"
+
+            | _ -> failwith "Invalid token"
+
+        | Start, Compose shifts ->
+            redirect {X = 0; Y =0} direction shifts
+
+        | Compose (h1 :: t1), shift ->
+            applyDirection h1 direction shift
+
+        | _ , Compose (h :: t) when h = preShift ->
+            match applyDirection h direction h  with
+            | Compose shifts ->
+                Compose (shifts @ t)
+            | h -> Compose (h :: t)
+
+
+        | Horizontal (coordiante1, i1), Compose (h :: t) ->
+            let calculatedCoordinate1 = { coordiante1 with X = coordiante1.X + i1 }
+            let coordinate2, i2 =
+                match h with 
+                | Horizontal (coordinate2, i2) | Vertical (coordinate2, i2) ->
+                    coordinate2, i2
+                | _ -> failwith "not implemented"
+
+            if coordinate2 = calculatedCoordinate1 then
+                match direction with 
+                | Direction.Horizontal ->
+                    redirect calculatedCoordinate1 direction (h :: t)
+                        
+                | Direction.Vertical ->
+                    Compose (Vertical (coordinate2, i2 + 1) :: t)
+
+                | _ -> failwith "Invalid token"
+            else redirect calculatedCoordinate1 direction (h :: t)
+
+        | Vertical (coordiante1, i1), Compose (h :: t) ->
+            let calculatedCoordinate1 = { coordiante1 with Y = coordiante1.Y + i1 }
+            let coordinate2, i2 =
+                match h with 
+                | Horizontal (coordinate2, i2) | Vertical (coordinate2, i2) ->
+                    coordinate2, i2
+                | _ -> failwith "not implemented"
+
+            if coordinate2 = calculatedCoordinate1 then
+                match direction with 
+                | Direction.Horizontal ->
+                    Compose (Horizontal (coordinate2, i2 + 1) :: t)
+                        
+                | Direction.Vertical ->
+                    redirect calculatedCoordinate1 direction (h :: t)
+
+                | _ -> failwith "Invalid token"
+            else redirect calculatedCoordinate1 direction (h :: t)
+
+        | _ -> failwith ""
 
 [<RequireQualifiedAccess>]
 module internal ExcelRangeBase =
@@ -280,7 +233,7 @@ with
     member private x.FoldedShift = x.Shift.Folded
 
 type OutputMatrixStreamResult<'result> =
-    { RelativeShift: RelativeShift
+    { IsSkip: bool
       Value: 'result }
 
 type OutputMatrixStream<'result> =
@@ -330,8 +283,10 @@ module OutputMatrixStream =
         stream.Range.Offset(0, 0, maxVertical + 1, maxHorizontal + 1)
 
     let applyDirectionToShift direction (preInputstream: InputMatrixStream) (stream: OutputMatrixStream<_>) =
-        { stream with 
-            Shift = Shift.applyDirection preInputstream.Shift stream.Result.RelativeShift direction stream.Shift }
+        if stream.Result.IsSkip then stream
+        else
+            { stream with 
+                Shift = Shift.applyDirection preInputstream.Shift direction stream.Shift }
 
     let mapResult mapping (stream: OutputMatrixStream<'result>) =
         { Range = stream.Range 
@@ -343,7 +298,7 @@ module OutputMatrixStream =
           Shift = stream.Shift 
           Result = 
             { Value = mapping stream.Result.Value
-              RelativeShift = stream.Result.RelativeShift }}
+              IsSkip = stream.Result.IsSkip }}
 
 
 [<RequireQualifiedAccess>]
@@ -383,12 +338,11 @@ let mxCellParserOp (cellParser: ExcelRangeBase -> 'result option) =
         let offsetedRange = ExcelRangeBase.offset stream.Shift stream.Range
         match cellParser offsetedRange with 
         | Some result ->
-
             [
                 { Range = stream.Range 
                   Shift = stream.Shift 
                   Result = 
-                    { RelativeShift = RelativeShift.Start
+                    { IsSkip = false
                       Value = result }
                 }
             ]
@@ -482,30 +436,15 @@ let pipe2RelativelyWithTupleStreamsReturn (direction: Direction) (p1: MatrixPars
             |> List.collect (fun newStream1 ->
                 let p2 = buildP2 newStream1
                 let inputStream2 = (OutputMatrixStream.applyDirectionToShift direction inputstream1 newStream1).AsInputStream
-                match p2 inputStream2 with 
-                | List.Some newStreams2 ->
-                    List.map (
-                        fun newStream2 ->
-                            let stream2RelativeShift = newStream2.Result.RelativeShift
-                            let stream2ResultValue = newStream2.Result.Value
-
-                            let newStream2 = 
-                                { Range = newStream2.Range
-                                  Result = 
-                                      { RelativeShift = RelativeShift.plus direction newStream1.Result.RelativeShift stream2RelativeShift
-                                        Value = f (newStream1.Result.Value, stream2ResultValue) }
-                                  Shift = 
-                                      match stream2RelativeShift with 
-                                      | RelativeShift.Skip -> newStream1.Shift 
-                                      | _ -> newStream2.Shift }
-
-                            newStreams1, newStream2
-
-                    ) newStreams2
-
-                | List.None -> []
+                p2 inputStream2
+                |> List.map (fun newStream2 -> 
+                    let newStream2 = 
+                        OutputMatrixStream.mapResultValue (fun result ->
+                            f (newStream1.Result.Value, result)
+                        ) newStream2
+                    newStream1, newStream2
+                )
             )
-            
         | List.None -> []
         
 
@@ -537,7 +476,7 @@ let private atLeastTwo (p: MatrixParser<'a list>) =
 
 let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result>) = 
     let isSkip outputStream = 
-        outputStream.Result.RelativeShift = RelativeShift.Skip
+        outputStream.Result.IsSkip
 
     fun inputStream ->
         let rec loop stream (accum: OutputMatrixStream<'result> list) = [
@@ -561,8 +500,8 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
                     | List.None -> yield []
 
                 | MatrixStream.Output (preInputStream,outputStreams1) ->
-                    if outputStreams1.Length = 0 then yield accum
-                    else
+                    match outputStreams1 with 
+                    | List.Some outputStreams1 ->
                         yield!
                             outputStreams1
                             |> List.collect (fun outputStream1 -> [
@@ -573,20 +512,13 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
 
                                     yield! List.replicate skip.Length []
 
-                                    let outputStreams2 = 
-                                        outputStreams2
-                                        |> List.map (fun outputStream2 ->
-                                            OutputMatrixStream.mapResult (fun result2 -> 
-                                                { RelativeShift = RelativeShift.plus direction outputStream1.Result.RelativeShift result2.RelativeShift
-                                                  Value = result2.Value }
-                                            ) outputStream2
-                                        )
-
                                     yield! loop (MatrixStream.Output (inputStream, outputStreams2)) (accum @ outputStreams2)
 
                                 | List.None ->  yield accum
                             ]
                             )
+
+                    | List.None -> yield accum
         ]
 
 
@@ -600,7 +532,7 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
                 { Range = last.Range 
                   Shift = last.Shift 
                   Result = 
-                    { RelativeShift = last.Result.RelativeShift
+                    { IsSkip = false
                       Value = 
                         outputStreams 
                         |> List.map (fun outputStream ->
@@ -613,7 +545,7 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
                 { Range = inputStream.Range
                   Shift = inputStream.Shift
                   Result = 
-                    { RelativeShift = RelativeShift.Skip
+                    { IsSkip = true
                       Value = []
                     }
                 }
@@ -665,10 +597,13 @@ let mxManySkipRetain direction pSkip maxSkipCount p =
 /// alaways backtrack
 let private mxMany1SkipRetain direction pSkip maxSkipCount p =
     let many1 = mxMany1 direction p
-
-    pipe2 direction many1 (mxManySkipRetain direction pSkip maxSkipCount p) (fun (a,b) ->
+    pipe2RelativelyWithTupleStreamsReturn direction (fun a -> many1 a) (fun _ -> mxManySkipRetain direction pSkip maxSkipCount p) (fun (a,b) ->
         List.map Result.Ok a @ b
-    ) 
+    ) >> List.map (fun (stream1, stream2) ->
+        if stream2.Result.IsSkip then 
+            stream1 |> OutputMatrixStream.mapResultValue (List.map Result.Ok)
+        else stream2
+    )
 
 
 let mxManySkip direction pSkip maxSkipCount p =

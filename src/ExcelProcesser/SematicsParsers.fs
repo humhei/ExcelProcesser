@@ -121,7 +121,7 @@ let mxGroupingColumn (GroupingColumnParserArg(pChildHeader, pElementSkip, pEleme
 
             match pElementSkip with 
             | Some pElementSkip ->
-                rm ((mxManySkipRetain Direction.Horizontal pElementSkip columns pElementInRange) ||>> (List.mapi (fun i result ->
+                rm ((fun a -> mxManySkipRetain Direction.Horizontal pElementSkip columns pElementInRange a) ||>> (List.mapi (fun i result ->
                     match result with 
                     | Result.Ok ok -> Some (i,ok)
                     | Result.Error _ -> None
