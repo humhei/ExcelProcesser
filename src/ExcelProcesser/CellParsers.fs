@@ -15,7 +15,7 @@ let pBkColor (color : Color) : CellParser =
     fun (cell : ExcelRangeBase) ->
         let toHex (color : Color) =
             sprintf "#%02X%02X%02X%02X" color.A color.R color.G color.B
-        let bkColor = cell.Style.Fill.BackgroundColor |> ExcelColor.getColorHex
+        let bkColor = cell.Style.Fill.BackgroundColor |> ExcelColor.hex
         let targetColor = toHex color
         bkColor = targetColor
 
@@ -23,7 +23,7 @@ let pFontColor (color : Color) : CellParser =
     fun (cell : ExcelRangeBase) ->
         let toHex (color : Color) =
             sprintf "#%02X%02X%02X%02X" color.A color.R color.G color.B
-        let fontColor = cell.Style.Font.Color |> ExcelColor.getColorHex
+        let fontColor = cell.Style.Font.Color |> ExcelColor.hex
         let targetColor = toHex color
         fontColor = targetColor
 
@@ -65,7 +65,7 @@ let pMerge = fun (range: ExcelRangeBase) -> range.Merge
 let pMergeStarter = fun (range: ExcelRangeBase) -> 
     if range.Merge then 
         let worksheet = range.Worksheet
-        let index = ExcelWorksheet.getMergeCellId range worksheet
+        let index = ExcelWorksheet.getMergeCellIdOfRange range worksheet
         let addr = worksheet.MergedCells.[index-1]
         worksheet.Cells.[addr].Start.Address = range.Address
     else false

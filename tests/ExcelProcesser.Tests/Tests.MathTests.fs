@@ -22,5 +22,4 @@ let mathTests =
         match results with 
         | ([1;2], 3) :: _ -> pass()
         | _ -> fail()
-
   ]

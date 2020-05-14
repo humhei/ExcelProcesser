@@ -311,7 +311,7 @@ type MatrixStream<'result> =
 type MatrixParser<'result> = InputMatrixStream -> OutputMatrixStream<'result> list
 
 [<RequireQualifiedAccess>]
-module List =
+module private List =
     let (|Some|None|) (list: 'a list) = 
         if list.Length = 0 then None
         else Some list
@@ -346,7 +346,9 @@ let mxCellParserOp (cellParser: ExcelRangeBase -> 'result option) =
                       Value = result }
                 }
             ]
-        | None -> []
+        | None -> 
+            //printfn "Parsing %O with %A failed" offsetedRange cellParser
+            []
 
 let mxCellParser (cellParser: CellParser) getResult =
     fun range ->
@@ -424,7 +426,7 @@ let internal inDebug p =
             m
         | List.None -> []
 
-let pipe2RelativelyWithTupleStreamsReturn (direction: Direction) (p1: MatrixParser<'result1>) (buildP2: OutputMatrixStream<'result1> -> MatrixParser<'result2>) f =
+let private pipe2RelativelyWithTupleStreamsReturn (direction: Direction) (p1: MatrixParser<'result1>) (buildP2: OutputMatrixStream<'result1> -> MatrixParser<'result2>) f =
 
     fun inputstream1 ->
 
@@ -449,7 +451,7 @@ let pipe2RelativelyWithTupleStreamsReturn (direction: Direction) (p1: MatrixPars
         
 
 
-let pipe2Relatively (direction: Direction) (p1: MatrixParser<'result1>) (buildP2: OutputMatrixStream<'result1> -> MatrixParser<'result2>) f =
+let private pipe2Relatively (direction: Direction) (p1: MatrixParser<'result1>) (buildP2: OutputMatrixStream<'result1> -> MatrixParser<'result2>) f =
     pipe2RelativelyWithTupleStreamsReturn direction p1 buildP2 f
     >> List.map snd
     
@@ -568,7 +570,9 @@ let mxMany1 direction p =
     mxMany direction p
     |> atLeastOne
 
-
+/// alaways backtrack
+/// 
+/// Result<_, _>
 let mxManySkipRetain direction pSkip maxSkipCount p =
     let skip = 
         mxManyWithMaxCount direction (Some maxSkipCount) pSkip 
@@ -595,7 +599,9 @@ let mxManySkipRetain direction pSkip maxSkipCount p =
         )
 
 /// alaways backtrack
-let private mxMany1SkipRetain direction pSkip maxSkipCount p =
+/// 
+/// Result<_, _>
+let mxMany1SkipRetain direction pSkip maxSkipCount p =
     let many1 = mxMany1 direction p
     pipe2RelativelyWithTupleStreamsReturn direction (fun a -> many1 a) (fun _ -> mxManySkipRetain direction pSkip maxSkipCount p) (fun (a,b) ->
         List.map Result.Ok a @ b
@@ -692,23 +698,24 @@ let mxMergeStarter inputStream =
 let mxMerge direction =
     pipe2Relatively direction mxMergeStarter (fun outputStream ->
         let workSheet = outputStream.Range.Worksheet
-        let mergeCellId = ExcelWorksheet.getMergeCellId workSheet.Cells.[outputStream.Result.Value.Address] workSheet
-        mxMany1 direction (mxCellParser (fun range -> ExcelWorksheet.getMergeCellId range workSheet = mergeCellId) ExcelRangeBase.getAddressOfRange)
+        let mergeCellId = ExcelWorksheet.getMergeCellIdOfRange workSheet.Cells.[outputStream.Result.Value.Address] workSheet
+        mxMany1 direction (mxCellParser (fun range -> ExcelWorksheet.getMergeCellIdOfRange range workSheet = mergeCellId) ExcelRangeBase.getAddress)
     ) id
 
-let cm p = mxMany1 Direction.Horizontal p
+let mxColMany1 p = mxMany1 Direction.Horizontal p
 
 let mxColManySkip pSkip maxSkipCount p = mxManySkip Direction.Horizontal pSkip maxSkipCount p
 
 let mxRowManySkip pSkip maxSkipCount p = mxManySkip Direction.Vertical pSkip maxSkipCount p
 
-let rm p = mxMany1 Direction.Vertical p
+let mxRowMany1 p = mxMany1 Direction.Vertical p
 
 let c2 p1 p2 =
     pipe2 Direction.Horizontal p1 p2 id
 
-let c2R p1 p2 = 
-    pipe2 Direction.Horizontal p1 p2 id
+/// R = Relatively
+let c2R p1 buildP2 = 
+    pipe2Relatively Direction.Horizontal p1 buildP2 id
 
 let c3 p1 p2 p3 =
     pipe3 Direction.Horizontal p1 p2 p3 id
@@ -743,15 +750,19 @@ let runMatrixParserForRanges (ranges : seq<ExcelRangeBase>) (p : MatrixParser<_>
 
 
 let runMatrixParserForRange (range : ExcelRangeBase) (p : MatrixParser<_>) =
-    let ranges = ExcelRangeBase.asRanges range
+    let ranges = ExcelRangeBase.asRangeList range
     let mses = runMatrixParserForRangesWithStreamsAsResult ranges p
     mses |> List.map (fun ms -> ms.Result.Value)
 
 let runMatrixParser (worksheet: ExcelWorksheet) (p: MatrixParser<_>) =
-    let userRange = 
-        worksheet
-        |> ExcelWorksheet.getUserRange
+    match worksheet with 
+    | null -> 
+        failwithf "Work sheet is empty, please check xlsx file"
+    | _ ->
+        let userRange = 
+            worksheet
+            |> ExcelWorksheet.getUserRangeList
 
-    runMatrixParserForRanges userRange p
+        runMatrixParserForRanges userRange p
 
 

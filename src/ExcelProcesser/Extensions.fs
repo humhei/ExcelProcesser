@@ -13,8 +13,34 @@ open System.IO
 module Extensions =
 
     [<RequireQualifiedAccess>]
+    module internal Array2D =
+
+        let joinByRows (a1: 'a[,]) (a2: 'a[,]) =
+            let a1l1,a1l2,a2l1,a2l2 = (Array2D.length1 a1),(Array2D.length2 a1),(Array2D.length1 a2),(Array2D.length2 a2)
+            if a1l2 <> a2l2 then failwith "arrays have different column sizes"
+            let result = Array2D.zeroCreate (a1l1 + a2l1) a1l2
+            Array2D.blit a1 0 0 result 0 0 a1l1 a1l2
+            Array2D.blit a2 0 0 result a1l1 0 a2l1 a2l2
+            result
+
+        let concatByRows (array2DList: 'a[,] seq) =
+            if Seq.length array2DList = 0 then Array2D.zeroCreate 0 0
+            else
+                array2DList
+                |> Seq.reduce joinByRows
+
+        let joinByCols (a1: 'a[,]) (a2: 'a[,]) =
+            let a1l1,a1l2,a2l1,a2l2 = (Array2D.length1 a1),(Array2D.length2 a1),(Array2D.length1 a2),(Array2D.length2 a2)
+            if a1l1 <> a2l1 then failwith "arrays have different row sizes"
+            let result = Array2D.zeroCreate a1l1 (a1l2 + a2l2)
+            Array2D.blit a1 0 0 result 0 0 a1l1 a1l2
+            Array2D.blit a2 0 0 result 0 a1l2 a2l1 a2l2
+            result
+
+
+    [<RequireQualifiedAccess>]
     module ExcelColor =
-        let getColorHex (color: ExcelColor)=
+        let hex (color: ExcelColor)=
             if color.Indexed > 0 then color.LookupColor()
             else "#" + color.Rgb
 
@@ -28,7 +54,7 @@ module Extensions =
         let private getMaxRowNumber (worksheet:ExcelWorksheet) =
             worksheet.Dimension.End.Row
 
-        let getUserRange worksheet =
+        let getUserRangeList worksheet =
             [ let maxRow = getMaxRowNumber worksheet
               let maxCol = getMaxColNumber worksheet
               for i in 1..maxRow do
@@ -36,18 +62,18 @@ module Extensions =
                       let content = worksheet.Cells.[i, j]
                       yield content :> ExcelRangeBase ]
 
-        let getMergeCellId (range: ExcelRangeBase) (worksheet: ExcelWorksheet) =
+        let getMergeCellIdOfRange (range: ExcelRangeBase) (worksheet: ExcelWorksheet) =
             worksheet.GetMergeCellId (range.Start.Row, range.Start.Column)
 
     [<RequireQualifiedAccess>]
     module ExcelRangeBase =
 
-        let asRanges (range: ExcelRangeBase) =
+        let asRangeList (range: ExcelRangeBase) =
             range :> seq<ExcelRangeBase>
             |> List.ofSeq
 
         let getText (range: ExcelRangeBase) = range.Text
 
-        let getAddressOfRange (range: ExcelRangeBase) = range.Address
+        let getAddress (range: ExcelRangeBase) = range.Address
 
 

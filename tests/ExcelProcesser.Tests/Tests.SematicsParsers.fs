@@ -32,19 +32,19 @@ let sematicsParsers =
                     (GroupingColumnParserArg(mxFParsec pint32, Some mxSpace, mxFParsec pint32))
                 )
         
-        match results.[0].ElementsList |> List.map (List.map snd) with 
+        match results.[0].ElementsList |> List.map (List.choose id) with 
         | [1; 2; 2; 2; 2; 2; 1; 1] :: [1; 1; 1; 2; 2; 1; 1; 1] :: [1] :: [1] :: [1] :: [1] :: [1] :: _ -> pass()
         | _ -> fail()
 
-    testCase "twoRowHeaderPivotTable frame" <| fun _ -> 
+    testCase "twoRowHeaderPivotTable" <| fun _ -> 
         let userRange = 
             worksheet
-            |> ExcelWorksheet.getUserRange
+            |> ExcelWorksheet.getUserRangeList
 
         let results = 
             runMatrixParserForRangesWithStreamsAsResult
                 userRange 
-                (TwoHeadersPivotTable.parser 
+                (mxTwoHeadersPivotTable 
                     (mxStyleName "Border") 
                     (mxStyleName "Number") 
                     (mxStyleName "Border")
@@ -52,6 +52,8 @@ let sematicsParsers =
                 )
         
         Expect.equal results.Length 1 "pass"
-
+        
+        let array2D = TwoHeadersPivotTable.toArray2D results.[0].Result.Value
+        Expect.equal array2D.Length 484 "pass"
 
   ]

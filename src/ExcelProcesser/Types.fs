@@ -11,3 +11,9 @@ open System.IO
 type Formula =
     | SUM = 0
 
+[<AutoOpen>]
+module Operators =
+    let ensureFParsecValid text parser  =
+        match run parser text with 
+        | Success _ -> parser
+        | Failure (error, _, _) -> failwith error

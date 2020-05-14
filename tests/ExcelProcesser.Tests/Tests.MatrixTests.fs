@@ -34,7 +34,7 @@ let shiftTests =
         | Vertical({X = 0; Y = 0},2) -> pass()
         | _ -> fail()
 
-    ptestCase "start + [Horizontal ({X = 0; Y = 0;},1);Vertical {1,0} 1;Horizontal {1,1} 1] => Horizontal {1,0},1" <| fun _ -> 
+    testCase "start + [Horizontal ({X = 0; Y = 0;},1);Vertical {1,0} 1;Horizontal {1,1} 1] => Horizontal {1,0},1" <| fun _ -> 
         let shift = 
             let shift = Compose [Horizontal ({X = 0; Y = 0;},1);Vertical({X = 1; Y =0},1) ;Horizontal({X=1; Y =1},1)]
             Shift.applyDirection (Start) Direction.Horizontal shift
@@ -230,7 +230,8 @@ let matrixTests =
                                 (fun a -> c2 (mxText "Cross_3D" ) (mxText "Cross_3E") a)
                             )
                             (fun a -> mxText "Cross_3F" a)
-                        ))
+                        )
+                    )
 
         match results with
         | [("Cross_3A", ("Cross_3B", ("Cross_3C", ("Cross_3D","Cross_3E")),"Cross_3F"))] -> pass()
@@ -241,7 +242,7 @@ let matrixTests =
         let results = 
             runMatrixParser 
                 worksheet 
-                (cm (mxTextf(fun text -> text.StartsWith "cm_n")))
+                (mxColMany1 (mxTextf(fun text -> text.StartsWith "cm_n")))
         match results with 
         | ["cm_n1"; "cm_n2"; "cm_n3"; "cm_n4"] :: _  -> pass()
         | _ -> fail()
@@ -250,7 +251,7 @@ let matrixTests =
         let results = 
             runMatrixParser 
                 worksheet 
-                (rm (mxTextf(fun text -> text.StartsWith "rm_n")))
+                (mxRowMany1 (mxTextf(fun text -> text.StartsWith "rm_n")))
         match results with 
         | ["rm_n1"; "rm_n2"; "rm_n3"; "rm_n4"] :: _  -> pass()
         | _ -> fail()
@@ -265,13 +266,13 @@ let matrixTests =
         | _ -> fail()
 
     testCase "column many with skip backtrack" <| fun _ -> 
-        let userRange = ExcelWorksheet.getUserRange worksheet
+        let userRange = ExcelWorksheet.getUserRangeList worksheet
         let results = 
             runMatrixParserForRangesWithStreamsAsResult
                 userRange
                 (mxColManySkip mxSpace 1 (mxTextf(fun text -> text.StartsWith "cm_skip_backTrack")))
         match results.[0].Shift.Last with 
-        | Horizontal ({X = 0; Y = 0},1)  -> pass()
+        | Horizontal ({X = 0; Y = 0},2)  -> pass()
         | _ -> fail()
 
     testCase "mx until" <| fun _ -> 
@@ -285,7 +286,7 @@ let matrixTests =
         | _ -> fail()
 
     testCase "cross area1 reRange" <| fun _ -> 
-        let userRange = ExcelWorksheet.getUserRange worksheet
+        let userRange = ExcelWorksheet.getUserRangeList worksheet
         let results = 
             runMatrixParserForRangesWithStreamsAsResult  
                 userRange
@@ -303,7 +304,7 @@ let matrixTests =
                 )
         results 
         |> List.map (OutputMatrixStream.reRange >> (fun range -> 
-            let ranges = ExcelRangeBase.asRanges range
+            let ranges = ExcelRangeBase.asRangeList range
             List.map ExcelRangeBase.getText ranges
             |> List.distinct
         ))
@@ -312,7 +313,7 @@ let matrixTests =
             | _ -> fail()
 
     testCase "cross area2 reRange" <| fun _ -> 
-        let userRange = ExcelWorksheet.getUserRange worksheet
+        let userRange = ExcelWorksheet.getUserRangeList worksheet
         let results = 
             runMatrixParserForRangesWithStreamsAsResult  
                 userRange
@@ -326,7 +327,7 @@ let matrixTests =
                 )
         results 
         |> List.map (OutputMatrixStream.reRange  >> (fun range -> 
-            let ranges = ExcelRangeBase.asRanges range
+            let ranges = List.ofSeq range
             List.map ExcelRangeBase.getText ranges
             |> List.distinct
         ))
