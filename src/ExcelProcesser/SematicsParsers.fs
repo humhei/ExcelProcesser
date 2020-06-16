@@ -97,16 +97,21 @@ with
         | Horizontal (coordinate, i) -> coordinate, i
         | _ -> failwith "Last shift should be horizontal"
 
-let mxGroupingColumnsHeader pChild =
+let mxGroupingColumnsHeader (defaultGroupedHeaderText: string option) pChild =
     r2
         (mxMerge Direction.Horizontal)
         (mxMany1 Direction.Horizontal pChild)
     |> MatrixParser.filterOutputStreamByResultValue (fun ((groupedHeader, emptys), childs) ->
-        groupedHeader.Text.Trim() <> "" 
+        match defaultGroupedHeaderText with 
+        | None -> groupedHeader.Text.Trim() <> "" 
+        | Some -> true
         && emptys.Length = childs.Length - 1
     )
     |||>> fun outputStream ((groupedHeader, _), childHeaders) -> 
-        { GroupedHeader = groupedHeader.Text
+        { GroupedHeader = 
+            match defaultGroupedHeaderText with 
+            | None -> groupedHeader.Text
+            | Some text -> text
           ChildHeaders = childHeaders
           Shift = outputStream.Shift }
 
@@ -118,22 +123,27 @@ type GroupingColumn<'childHeader, 'element> =
 
 
 type GroupingColumnParserArg<'childHeader,'elementSkip, 'element> =
-    GroupingColumnParserArg of 
-        pChildHeader: MatrixParser<'childHeader> 
+    GroupingColumnParserArg_ of 
+        defaultGroupedHeaderText: string option
+        * pChildHeader: MatrixParser<'childHeader> 
         * pElementSkip: MatrixParser<'elementSkip> option
         * pElement: MatrixParser<'element>
 
-let mxGroupingColumn (GroupingColumnParserArg(pChildHeader, pElementSkip, pElement)) =
+type GroupingColumnParserArg =
+    static member Create(pChildHeader, pElementSkip, pElement, ?defaultGroupedHeaderText) =
+        GroupingColumnParserArg_(defaultGroupedHeaderText, pChildHeader, pElementSkip, pElement)
+
+let mxGroupingColumn (GroupingColumnParserArg_(defaultGroupedHeaderText, pChildHeader, pElementSkip, pElement)) =
     (r2R 
-        (mxGroupingColumnsHeader pChildHeader)
+        (mxGroupingColumnsHeader defaultGroupedHeaderText pChildHeader)
         (fun outputStream ->
 
             let maxColNum, columns = 
                 let reranged = OutputMatrixStream.reRange outputStream
-                reranged.End.Column,reranged.Columns
+                reranged.End.Column, reranged.Columns
 
             let pElementInRange =
-                pElement <&> (mxCellParser (fun range -> range.Start.Column <= maxColNum) ignore)
+                pElement <&> (mxCellParser (fun range -> range.Value.Start.Column <= maxColNum) ignore)
 
 
             match pElementSkip with 
@@ -148,8 +158,7 @@ let mxGroupingColumn (GroupingColumnParserArg(pChildHeader, pElementSkip, pEleme
     ) 
     ||>> fun (header, elementsList) ->
         { Header = header
-          ElementsList = elementsList
-        }
+          ElementsList = elementsList }
 
 
 type TwoHeadersPivotTableBorder<'leftBorderHeader,'numberHeader,'rightBorderHeader> =
@@ -159,13 +168,13 @@ type TwoHeadersPivotTableBorder<'leftBorderHeader,'numberHeader,'rightBorderHead
       SumResult: int
       RightBorderHeader: 'rightBorderHeader }
 
-let mxTwoHeadersPivotTableBorder pLeftBorderHeader pNumberHeader pRightBorderHeader =
+let private mxTwoHeadersPivotTableBorder pLeftBorderHeader pNumberHeader pRightBorderHeader =
     c3 
         (pLeftBorderHeader <&> mxMergeStarter)
         (mxUntilA50
             (r2 
                 (pNumberHeader <&> mxMergeStarter)
-                (mxUntilA5 (mxSum Direction.Vertical))
+                (mxUntilA50 (mxSum Direction.Vertical))
             )
         )
         (mxUntilA50 (pRightBorderHeader <&> mxMergeStarter))
@@ -184,7 +193,7 @@ type NormalColumn =
 
 [<RequireQualifiedAccess>]
 module NormalColumn =
-    let fixEmptyUp column =
+    let internal fixEmptyUp column =
         { column with 
             Contents = 
                 column.Contents 
@@ -197,7 +206,7 @@ module NormalColumn =
 
                     if isNullOrEmpty then 
                         column.Contents.[0 .. i - 1]
-                        |> List.tryFind (fun content -> not (isNull content))
+                        |> List.tryFindBack (fun content -> not (isNull content))
                         |> function 
                             | Some v -> v
                             | None -> null
@@ -207,18 +216,24 @@ module NormalColumn =
 
 type TwoHeadersPivotTable<'groupingColumnChildHeader, 'groupingColumnElement> =
     { GroupingColumn: GroupingColumn<'groupingColumnChildHeader, 'groupingColumnElement>
-      NormalColumns: NormalColumn list }
+      NormalColumns: NormalColumn list
+      SumNumber: int }
 
-[<RequireQualifiedAccess>]
-module TwoHeadersPivotTable =
-    let fixEmptyUp twoHeadersPivotTable =
+type TwoHeadersPivotTable =
+    static member private FixEmptyUp twoHeadersPivotTable =
         { twoHeadersPivotTable with 
             NormalColumns = 
                 twoHeadersPivotTable.NormalColumns |> List.map NormalColumn.fixEmptyUp
         }
 
-    let toFrame twoHeadersPivotTable =
-        let twoHeadersPivotTable = fixEmptyUp twoHeadersPivotTable
+    static member ToFrame (twoHeadersPivotTable, ?fixEmptyUp) =
+        let twoHeadersPivotTable = 
+            let isFixEmptyUp = defaultArg fixEmptyUp true
+            match isFixEmptyUp with 
+            | true ->
+                TwoHeadersPivotTable.FixEmptyUp twoHeadersPivotTable
+            | false -> twoHeadersPivotTable
+
         let groupingColumn = twoHeadersPivotTable.GroupingColumn
 
         let groupingColumnHeader = groupingColumn.Header
@@ -248,8 +263,8 @@ module TwoHeadersPivotTable =
             )
         )
 
-    let toArray2D twoHeadersPivotTable =
-        toFrame twoHeadersPivotTable
+    static member ToArray2D (twoHeadersPivotTable, ?fixEmptyUp) =
+        TwoHeadersPivotTable.ToFrame(twoHeadersPivotTable, ?fixEmptyUp = fixEmptyUp)
         |> Frame.toArray2DWithHeader
 
 
@@ -259,45 +274,49 @@ let mxTwoHeadersPivotTable pLeftBorderHeader pNumberHeader pRightBorderHeader pG
     mxTwoHeadersPivotTableBorder pLeftBorderHeader pNumberHeader pRightBorderHeader
     |> MatrixParser.collectOutputStream (fun outputStream ->
         let reranged = OutputMatrixStream.reRange outputStream
-        reranged
-        |> List.ofSeq
-        |> List.collect (fun range ->
-            let resetedInputStream = 
-                { Range = range
-                  Shift = Shift.Start }
-            let p = 
-                c3 
-                    ((pLeftBorderHeader <&> mxMergeStarter) ||>> ignore)
-                    (mxUntilA50
-                        ((mxGroupingColumn pGroupingColumn)))
-                    (inDebug(mxUntilA50 (pRightBorderHeader <&> mxMergeStarter)) ||>> ignore)
-                ||>> ((fun (_, b, _) -> b) >> fun groupingColumn ->
-                    let normalColumns =
-                        let array2D = 
-                            (reranged).Value :?> obj[,]
+        let range = 
+            reranged
+            |> Seq.head
+            |> SingletonExcelRangeBase.Create
 
-                        let exceptGroupingColumn array2D = 
-                            Array2D.pickHeaderTailColumnsNotIncludeByIndexer groupingColumn.Header.Indexer array2D
-            
-                        let newArray2D = 
-                            array2D
-                            |> exceptGroupingColumn
-                            |> Array2D.removeSencondRow
-                            |> Array2D.removeLastRow
+        let resetedInputStream = 
+            { Range = range
+              Shift = Shift.Start }
 
-                        [
-                            for i = 0 to Array2D.length2 newArray2D - 1 do 
-                                let column = newArray2D.[*, i]
-                                yield
-                                    { Header = column.[0].ToString()
-                                      Contents = List.ofArray column.[1..]}
-                        ]
-                    { GroupingColumn = groupingColumn 
-                      NormalColumns = normalColumns }
-                )
-            p resetedInputStream
+        let p = 
+            c3 
+                ((pLeftBorderHeader <&> mxMergeStarter) ||>> ignore)
+                (mxUntilA50
+                    ((mxGroupingColumn pGroupingColumn)))
+                (inDebug(mxUntilA50 (pRightBorderHeader <&> mxMergeStarter)) ||>> ignore)
+            ||>> ((fun (_, b, _) -> b) >> fun groupingColumn ->
+                let normalColumns =
+                    let array2D = 
+                        (reranged).Value :?> obj[,]
 
-        )
+                    let exceptGroupingColumn array2D = 
+                        Array2D.pickHeaderTailColumnsNotIncludeByIndexer groupingColumn.Header.Indexer array2D
+        
+                    let newArray2D = 
+                        array2D
+                        |> exceptGroupingColumn
+                        |> Array2D.removeSencondRow
+                        |> Array2D.removeLastRow
+
+                    [
+                        for i = 0 to Array2D.length2 newArray2D - 1 do 
+                            let column = newArray2D.[*, i]
+                            yield
+                                { Header = column.[0].ToString()
+                                  Contents = List.ofArray column.[1..]}
+                    ]
+                { GroupingColumn = groupingColumn 
+                  NormalColumns = normalColumns
+                  SumNumber = outputStream.Result.Value.SumResult }
+            )
+        p resetedInputStream
+
+     
 
     )
 

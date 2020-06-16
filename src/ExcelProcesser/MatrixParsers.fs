@@ -1,5 +1,5 @@
 ﻿module ExcelProcesser.MatrixParsers
-
+#nowarn "0104"
 open OfficeOpenXml
 open Extensions
 open CellParsers
@@ -220,12 +220,19 @@ module internal ExcelRangeBase =
             match shifts with
             | [] -> failwith "compose shifts cannot be empty after start"
 
-            | h :: _ ->
-                offset h range
+            | h :: _ -> offset h range
     
+[<RequireQualifiedAccess>]
+module internal SingletonExcelRangeBase =
+    let offset(shift: Shift) (range: SingletonExcelRangeBase) =
+        range.Value
+        |> ExcelRangeBase.offset shift
+        |> SingletonExcelRangeBase.Create
+
+
 
 type InputMatrixStream = 
-    { Range: ExcelRangeBase
+    { Range: SingletonExcelRangeBase
       Shift: Shift }
 with 
     member private x.LastCellShift = x.Shift.Last
@@ -237,7 +244,7 @@ type OutputMatrixStreamResult<'result> =
       Value: 'result }
 
 type OutputMatrixStream<'result> =
-    { Range:  ExcelRangeBase
+    { Range: SingletonExcelRangeBase
       Shift: Shift
       Result: OutputMatrixStreamResult<'result> }
 
@@ -333,9 +340,9 @@ module MatrixParser =
             let (outputStreams: OutputMatrixStream<'result> list) = p inputStream
             List.filter (fun outputStream -> f outputStream.Result.Value) outputStreams
 
-let mxCellParserOp (cellParser: ExcelRangeBase -> 'result option) =
+let mxCellParserOp (cellParser: SingletonExcelRangeBase -> 'result option) =
     fun (stream: InputMatrixStream) ->
-        let offsetedRange = ExcelRangeBase.offset stream.Shift stream.Range
+        let offsetedRange = SingletonExcelRangeBase.offset stream.Shift stream.Range
         match cellParser offsetedRange with 
         | Some result ->
             [
@@ -354,7 +361,7 @@ let mxCellParser (cellParser: CellParser) getResult =
     fun range ->
         let b = cellParser range
         if b then 
-            Some (getResult range)
+            Some (getResult range.Value)
         else None
     |> mxCellParserOp
 
@@ -697,9 +704,9 @@ let mxMergeStarter inputStream =
 
 let mxMerge direction =
     pipe2Relatively direction mxMergeStarter (fun outputStream ->
-        let workSheet = outputStream.Range.Worksheet
+        let workSheet = outputStream.Range.Value.Worksheet
         let mergeCellId = ExcelWorksheet.getMergeCellIdOfRange workSheet.Cells.[outputStream.Result.Value.Address] workSheet
-        mxMany1 direction (mxCellParser (fun range -> ExcelWorksheet.getMergeCellIdOfRange range workSheet = mergeCellId) ExcelRangeBase.getAddress)
+        mxMany1 direction (mxCellParser (fun range -> ExcelWorksheet.getMergeCellIdOfRange range.Value workSheet = mergeCellId) ExcelRangeBase.getAddress)
     ) id
 
 let mxColMany1 p = mxMany1 Direction.Horizontal p
@@ -731,7 +738,7 @@ let r2R p1 buildP2 =
 let r3 p1 p2 p3 = 
     pipe3 Direction.Vertical p1 p2 p3 id
 
-let runMatrixParserForRangesWithStreamsAsResult (ranges : seq<ExcelRangeBase>) (p : MatrixParser<_>) =
+let runMatrixParserForRangesWithStreamsAsResult (ranges : seq<SingletonExcelRangeBase>) (p : MatrixParser<_>) =
     let inputStreams = 
         ranges 
         |> List.ofSeq
@@ -744,17 +751,34 @@ let runMatrixParserForRangesWithStreamsAsResult (ranges : seq<ExcelRangeBase>) (
     |> List.collect p
 
 
-let runMatrixParserForRanges (ranges : seq<ExcelRangeBase>) (p : MatrixParser<_>) =
+let runMatrixParserForRanges (ranges : seq<SingletonExcelRangeBase>) (p : MatrixParser<_>) =
     let mses = runMatrixParserForRangesWithStreamsAsResult ranges p
     mses |> List.map (fun ms -> ms.Result.Value)
 
 
 let runMatrixParserForRange (range : ExcelRangeBase) (p : MatrixParser<_>) =
-    let ranges = ExcelRangeBase.asRangeList range
+    let ranges = 
+        ExcelRangeBase.asRangeList range
     let mses = runMatrixParserForRangesWithStreamsAsResult ranges p
     mses |> List.map (fun ms -> ms.Result.Value)
 
 let runMatrixParser (worksheet: ExcelWorksheet) (p: MatrixParser<_>) =
+    match worksheet with 
+    | null -> 
+        failwithf "Work sheet is empty, please check xlsx file"
+    | _ ->
+        match worksheet.Hidden with 
+        | eWorkSheetHidden.Visible ->
+            let userRange = 
+                worksheet
+                |> ExcelWorksheet.getUserRangeList
+
+            runMatrixParserForRanges userRange p
+
+        | eWorkSheetHidden.Hidden | eWorkSheetHidden.VeryHidden -> []
+
+
+let runMatrixParserIncludingHiddenSheets (worksheet: ExcelWorksheet) (p: MatrixParser<_>) =
     match worksheet with 
     | null -> 
         failwithf "Work sheet is empty, please check xlsx file"
@@ -764,5 +788,4 @@ let runMatrixParser (worksheet: ExcelWorksheet) (p: MatrixParser<_>) =
             |> ExcelWorksheet.getUserRangeList
 
         runMatrixParserForRanges userRange p
-
 

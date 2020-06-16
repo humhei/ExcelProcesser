@@ -255,7 +255,7 @@ let matrixTests =
         match results with 
         | ["rm_n1"; "rm_n2"; "rm_n3"; "rm_n4"] :: _  -> pass()
         | _ -> fail()
-
+        
     testCase "column many with skip" <| fun _ -> 
         let results = 
             runMatrixParser 
@@ -305,7 +305,7 @@ let matrixTests =
         results 
         |> List.map (OutputMatrixStream.reRange >> (fun range -> 
             let ranges = ExcelRangeBase.asRangeList range
-            List.map ExcelRangeBase.getText ranges
+            List.map SingletonExcelRangeBase.getText ranges
             |> List.distinct
         ))
         |> function

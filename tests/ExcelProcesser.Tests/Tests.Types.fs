@@ -21,13 +21,14 @@ module XLPath =
 
     let testData = Path.GetFullPath "resources/testData.xlsx"
 
-    [<RequireQualifiedAccess>]
     module RealWorldSamples =
         let private fullPath name = Path.GetFullPath("resources/real world samples/" + name)
 
         let ``19SPX16合同附件`` = fullPath "19SPX16合同生产细节.xlsx"
+        let ``19SPX16Merge`` = fullPath "19SPX16Merge.csv"
 
-        module Module_19SPX16合同附件 =
+
+        module Module_嘴唇 =
 
             type ColorGroup =
                 { Color: string 

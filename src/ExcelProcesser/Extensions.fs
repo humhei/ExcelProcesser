@@ -10,6 +10,36 @@ open OfficeOpenXml.Style
 open System
 open System.IO
 
+type SingletonExcelRangeBase = private SingletonExcelRangeBase of ExcelRangeBase
+with 
+    static member Create (excelRangeBase: ExcelRangeBase) =
+        match excelRangeBase.Columns, excelRangeBase.Rows with 
+        | 1, 1 -> SingletonExcelRangeBase excelRangeBase
+        | _ -> failwithf "Cannot create SingletonExcelRangeBase when columns is %d and rows is %d" excelRangeBase.Columns excelRangeBase.Rows
+
+
+    member x.Value =
+        let (SingletonExcelRangeBase value) = x
+        value
+
+    member x.Offset(rowOffset, columnOffset, numberOfRows, numberOfColumns) = x.Value.Offset(rowOffset, columnOffset, numberOfRows, numberOfColumns)
+
+[<RequireQualifiedAccess>]
+module SingletonExcelRangeBase =
+    let getValue (range: SingletonExcelRangeBase) =
+        range.Value
+
+    let getText (range: SingletonExcelRangeBase) = 
+        range.Value.Text
+
+[<AutoOpen>]
+module AutoOpen_Extensions =
+    
+    [<RequireQualifiedAccess>]
+    module String =
+        let contains pattern (text: string) =
+            text.Contains pattern
+
 module Extensions =
 
     [<RequireQualifiedAccess>]
@@ -60,7 +90,7 @@ module Extensions =
               for i in 1..maxRow do
                   for j in 1..maxCol do
                       let content = worksheet.Cells.[i, j]
-                      yield content :> ExcelRangeBase ]
+                      yield SingletonExcelRangeBase.Create(content :> ExcelRangeBase) ]
 
         let getMergeCellIdOfRange (range: ExcelRangeBase) (worksheet: ExcelWorksheet) =
             worksheet.GetMergeCellId (range.Start.Row, range.Start.Column)
@@ -71,9 +101,9 @@ module Extensions =
         let asRangeList (range: ExcelRangeBase) =
             range :> seq<ExcelRangeBase>
             |> List.ofSeq
+            |> List.map SingletonExcelRangeBase.Create
 
         let getText (range: ExcelRangeBase) = range.Text
 
         let getAddress (range: ExcelRangeBase) = range.Address
-
 
