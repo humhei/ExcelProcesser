@@ -315,7 +315,9 @@ type MatrixStream<'result> =
 
 
 
-type MatrixParser<'result> = InputMatrixStream -> OutputMatrixStream<'result> list
+type MatrixParserName = MatrixParserName of string
+
+type MatrixParser<'result> =  MatrixParserName * InputMatrixStream -> OutputMatrixStream<'result> list
 
 [<RequireQualifiedAccess>]
 module private List =
@@ -356,11 +358,11 @@ let mxCellParserOp (cellParser: SingletonExcelRangeBase -> 'result option) =
         | None -> 
             match ExcelProcesserLoggerLevel with 
             | LoggerLevel.Slient -> ()
-            | LoggerLevel.Info -> 
+            | LoggerLevel.Error -> 
                 let error = 
-                    sprintf "Parsing %O with %A failed" offsetedRange cellParser
+                    sprintf "Parsing %O with %A failed" offsetedRange.Value.Address cellParser
                 
-                NLog.LogManager.GetCurrentClassLogger().Info(error)
+                NLog.LogManager.GetCurrentClassLogger().Error(error)
             []
 
 let mxCellParser (cellParser: CellParser) getResult =
