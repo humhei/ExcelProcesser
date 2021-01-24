@@ -104,7 +104,7 @@ let mxGroupingColumnsHeader (defaultGroupedHeaderText: string option) pChild =
     |> MatrixParser.filterOutputStreamByResultValue (fun ((groupedHeader, emptys), childs) ->
         match defaultGroupedHeaderText with 
         | None -> groupedHeader.Text.Trim() <> "" 
-        | Some -> true
+        | Some _ -> true
         && emptys.Length = childs.Length - 1
     )
     |||>> fun outputStream ((groupedHeader, _), childHeaders) -> 
@@ -174,7 +174,7 @@ let private mxTwoHeadersPivotTableBorder pLeftBorderHeader pNumberHeader pRightB
         (mxUntilA50
             (r2 
                 (pNumberHeader <&> mxMergeStarter)
-                (mxUntilA50 (mxSum Direction.Vertical))
+                (mxUntilA50 (mxSumContinuously Direction.Vertical))
             )
         )
         (mxUntilA50 (pRightBorderHeader <&> mxMergeStarter))

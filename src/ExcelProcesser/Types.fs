@@ -13,6 +13,9 @@ type Formula =
 
 [<AutoOpen>]
 module Operators =
+
+    let mutable ExcelProcesserLoggerLevel = LoggerLevel.Slient
+
     let ensureFParsecValid text parser  =
         match run parser text with 
         | Success _ -> parser

@@ -354,7 +354,13 @@ let mxCellParserOp (cellParser: SingletonExcelRangeBase -> 'result option) =
                 }
             ]
         | None -> 
-            //printfn "Parsing %O with %A failed" offsetedRange cellParser
+            match ExcelProcesserLoggerLevel with 
+            | LoggerLevel.Slient -> ()
+            | LoggerLevel.Info -> 
+                let error = 
+                    sprintf "Parsing %O with %A failed" offsetedRange cellParser
+                
+                NLog.LogManager.GetCurrentClassLogger().Info(error)
             []
 
 let mxCellParser (cellParser: CellParser) getResult =
@@ -727,6 +733,37 @@ let c2R p1 buildP2 =
 let c3 p1 p2 p3 =
     pipe3 Direction.Horizontal p1 p2 p3 id
 
+let c4 p1 p2 p3 p4 =
+    c2 (c3 p1 p2 p3) p4
+    ||>> (fun ((a, b, c), d) ->
+        a, b, c, d
+    )
+
+let c5 p1 p2 p3 p4 p5 =
+    c2  (c3 p1 p2 p3) (c2 p4 p5)
+    ||>> (fun ((a, b, c), (d, e)) ->
+        a, b, c, d, e
+    )
+
+let c6 p1 p2 p3 p4 p5 p6 =
+    c2  (c3 p1 p2 p3) (c3 p4 p5 p6)
+    ||>> (fun ((a, b, c), (d, e, f)) ->
+        a, b, c, d, e, f
+    )
+
+let c7 p1 p2 p3 p4 p5 p6 p7 =
+    c2  (c3 p1 p2 p3) (c4 p4 p5 p6 p7)
+    ||>> (fun ((a, b, c), (d, e, f, g)) ->
+        a, b, c, d, e, f, g
+    )
+
+let c8 p1 p2 p3 p4 p5 p6 p7 p8 =
+    c2  (c3 p1 p2 p3) (c5 p4 p5 p6 p7 p8)
+    ||>> (fun ((a, b, c), (d, e, f, g, h)) ->
+        a, b, c, d, e, f, g, h
+    )
+
+
 let r2 p1 p2 =
     pipe2 Direction.Vertical p1 p2 id
 
@@ -737,6 +774,36 @@ let r2R p1 buildP2 =
 
 let r3 p1 p2 p3 = 
     pipe3 Direction.Vertical p1 p2 p3 id
+
+let r4 p1 p2 p3 p4 =
+    r2 (r3 p1 p2 p3) p4
+    ||>> (fun ((a, b, c), d) ->
+        a, b, c, d
+    )
+
+let r5 p1 p2 p3 p4 p5 =
+    r2  (r3 p1 p2 p3) (r2 p4 p5)
+    ||>> (fun ((a, b, c), (d, e)) ->
+        a, b, c, d, e
+    )
+
+let r6 p1 p2 p3 p4 p5 p6 =
+    r2  (r3 p1 p2 p3) (r3 p4 p5 p6)
+    ||>> (fun ((a, b, c), (d, e, f)) ->
+        a, b, c, d, e, f
+    )
+
+let r7 p1 p2 p3 p4 p5 p6 p7 =
+    r2  (r3 p1 p2 p3) (r4 p4 p5 p6 p7)
+    ||>> (fun ((a, b, c), (d, e, f, g)) ->
+        a, b, c, d, e, f, g
+    )
+
+let r8 p1 p2 p3 p4 p5 p6 p7 p8 =
+    r2  (r3 p1 p2 p3) (r5 p4 p5 p6 p7 p8)
+    ||>> (fun ((a, b, c), (d, e, f, g, h)) ->
+        a, b, c, d, e, f, g, h
+    )
 
 let runMatrixParserForRangesWithStreamsAsResult (ranges : seq<SingletonExcelRangeBase>) (p : MatrixParser<_>) =
     let inputStreams = 

@@ -10,6 +10,10 @@ open OfficeOpenXml.Style
 open System
 open System.IO
 
+type LoggerLevel = 
+    | Info = 0
+    | Slient = 1
+
 type SingletonExcelRangeBase = private SingletonExcelRangeBase of ExcelRangeBase
 with 
     static member Create (excelRangeBase: ExcelRangeBase) =
