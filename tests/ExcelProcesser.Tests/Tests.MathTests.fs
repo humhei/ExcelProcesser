@@ -17,7 +17,7 @@ let worksheet = excelPackage.Workbook.Worksheets.["Math"]
 
 let mathTests =
   testList "MathTests" [
-    ftestCase "sum" <| fun _ -> 
+    testCase "mxSumContinuously" <| fun _ -> 
         let results = runMatrixParser worksheet (mxSumContinuously Direction.Vertical)
         match results with 
         | ([1;2], 3) :: _ -> pass()

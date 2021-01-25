@@ -61,42 +61,70 @@ module Shift =
         | _ -> false
 
     let private redirect (preCalculatedCoordinate: Coordinate) (direction: Direction) (shifts: Shift list) =
-        if List.forall (fun shift -> length shift = 1) shifts then 
+        if List.forall (fun shift -> true (*length shift = 1*)) shifts then 
             match direction with 
             | Direction.Horizontal ->
                 let chooser shift =
                     match shift with 
                     | Shift.Horizontal (coordinate,i) ->
-                        if coordinate.Y = preCalculatedCoordinate.Y then Some { coordinate with X = coordinate.X + i }
+                        if coordinate.Y = preCalculatedCoordinate.Y 
+                        then 
+                            Some (
+                                Horizontal(
+                                    coordinate,
+                                    i + 1
+                                )
+                            )
                         else None
 
                     | Shift.Vertical (coordinate,i) ->
-                        if coordinate.Y = preCalculatedCoordinate.Y then Some coordinate
+                        if coordinate.Y = preCalculatedCoordinate.Y 
+                        then 
+                            Some (
+                                Horizontal(
+                                    { coordinate with X = coordinate.X + 1},
+                                    0
+                                )
+                            )
                         else None
                     | _ -> None
 
                 match List.tryPick chooser shifts with 
-                | Some coordinate ->
-                    Compose (Horizontal (coordinate,1) :: shifts)
+                | Some shift ->
+                    Compose (shift :: shifts)
                 | None ->
-                    failwith "not implemented"
+                    failwithf "not implemented preCalculatedCoordinate %A direction %A shifts %A" preCalculatedCoordinate direction shifts
 
             | Direction.Vertical ->
                 let chooser shift =
                     match shift with 
                     | Shift.Horizontal (coordinate,i) ->
-                        if coordinate.X = preCalculatedCoordinate.X then Some coordinate
+                        if coordinate.X = preCalculatedCoordinate.X 
+                        then 
+                            Some (
+                                Vertical(
+                                    { coordinate with Y = coordinate.Y + 1},
+                                    0
+                                )
+                            )
                         else None
                     | Shift.Vertical (coordinate, i) ->
-                        if coordinate.X = preCalculatedCoordinate.X then Some {coordinate with Y = coordinate.Y + i}
+                        if coordinate.X = preCalculatedCoordinate.X 
+                        then 
+                            Some (
+                                Vertical(
+                                    coordinate,
+                                    i + 1
+                                )
+                            )
                         else None
                     | _ -> None
 
                 match List.tryPick chooser shifts with 
-                | Some coordinate ->
-                    Compose (Vertical (coordinate, 1) :: shifts)
+                | Some shift ->
+                    Compose (shift :: shifts)
                 | None ->
-                    failwith "not implemented"
+                    failwithf "not implemented preCalculatedCoordinate %A direction %A shifts %A" preCalculatedCoordinate direction shifts
             | _ -> failwith "Invalid token"
         else
             failwith ""
@@ -166,43 +194,13 @@ module Shift =
 
         | Horizontal (coordiante1, i1), Compose (h :: t) ->
             let calculatedCoordinate1 = { coordiante1 with X = coordiante1.X + i1 }
-            let coordinate2, i2 =
-                match h with 
-                | Horizontal (coordinate2, i2) | Vertical (coordinate2, i2) ->
-                    coordinate2, i2
-                | _ -> failwith "not implemented"
-
-            if coordinate2 = calculatedCoordinate1 then
-                match direction with 
-                | Direction.Horizontal ->
-                    redirect calculatedCoordinate1 direction (h :: t)
-                        
-                | Direction.Vertical ->
-                    Compose (Vertical (coordinate2, i2 + 1) :: t)
-
-                | _ -> failwith "Invalid token"
-            else redirect calculatedCoordinate1 direction (h :: t)
+            redirect calculatedCoordinate1 direction (h :: t)
 
         | Vertical (coordiante1, i1), Compose (h :: t) ->
             let calculatedCoordinate1 = { coordiante1 with Y = coordiante1.Y + i1 }
-            let coordinate2, i2 =
-                match h with 
-                | Horizontal (coordinate2, i2) | Vertical (coordinate2, i2) ->
-                    coordinate2, i2
-                | _ -> failwith "not implemented"
+            redirect calculatedCoordinate1 direction (h :: t)
 
-            if coordinate2 = calculatedCoordinate1 then
-                match direction with 
-                | Direction.Horizontal ->
-                    Compose (Horizontal (coordinate2, i2 + 1) :: t)
-                        
-                | Direction.Vertical ->
-                    redirect calculatedCoordinate1 direction (h :: t)
-
-                | _ -> failwith "Invalid token"
-            else redirect calculatedCoordinate1 direction (h :: t)
-
-        | _ -> failwith ""
+        | _ -> failwith "not implemented"
 
 [<RequireQualifiedAccess>]
 module internal ExcelRangeBase =
@@ -315,9 +313,7 @@ type MatrixStream<'result> =
 
 
 
-type MatrixParserName = MatrixParserName of string
-
-type MatrixParser<'result> =  MatrixParserName * InputMatrixStream -> OutputMatrixStream<'result> list
+type MatrixParser<'result> =  InputMatrixStream -> OutputMatrixStream<'result> list
 
 [<RequireQualifiedAccess>]
 module private List =
@@ -342,6 +338,7 @@ module MatrixParser =
             let (outputStreams: OutputMatrixStream<'result> list) = p inputStream
             List.filter (fun outputStream -> f outputStream.Result.Value) outputStreams
 
+
 let mxCellParserOp (cellParser: SingletonExcelRangeBase -> 'result option) =
     fun (stream: InputMatrixStream) ->
         let offsetedRange = SingletonExcelRangeBase.offset stream.Shift stream.Range
@@ -356,13 +353,13 @@ let mxCellParserOp (cellParser: SingletonExcelRangeBase -> 'result option) =
                 }
             ]
         | None -> 
-            match ExcelProcesserLoggerLevel with 
-            | LoggerLevel.Slient -> ()
-            | LoggerLevel.Error -> 
-                let error = 
-                    sprintf "Parsing %O with %A failed" offsetedRange.Value.Address cellParser
+            //match ExcelProcesserLoggerLevel with 
+            //| LoggerLevel.Slient -> ()
+            //| LoggerLevel.Error -> 
+            //    let error = 
+            //        sprintf "Parsing %O with %A failed" offsetedRange.Value.Address cellParser
                 
-                NLog.LogManager.GetCurrentClassLogger().Error(error)
+            //    NLog.LogManager.GetCurrentClassLogger().Error(error)
             []
 
 let mxCellParser (cellParser: CellParser) getResult =
@@ -396,6 +393,21 @@ let mxAnyOrigin inputStream =
 
 let (||>>) p f = 
     MatrixParser.mapOutputStream (fun outputStream -> OutputMatrixStream.mapResultValue f outputStream) p
+
+[<AutoOpen>]
+module LoggerExtensions =
+    module MatrixParser =
+        let addLogger name (parser: MatrixParser<_>) = 
+            parser
+            ||>> (fun result ->
+                match ExcelProcesserLoggerLevel with 
+                | LoggerLevel.Trace_Red ->
+                    NLog.LogManager.GetCurrentClassLogger().Error(sprintf "Name: %s\nResult: %A" name result)
+                | LoggerLevel.Slient -> ()
+
+                result
+            )
+
 
 let (|||>>) p f = 
     MatrixParser.mapOutputStream (fun outputStream ->

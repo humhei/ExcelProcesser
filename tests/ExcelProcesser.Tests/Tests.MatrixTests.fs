@@ -16,7 +16,7 @@ let excelPackage = new ExcelPackage(FileInfo(XLPath.testData))
 let worksheet = excelPackage.Workbook.Worksheets.["Matrix"]
 
 let shiftTests =
-  testList "ShiftTests" [
+  ptestList "ShiftTests" [
 
     testCase "start + Horizontal ({X = 0; Y = 0;},1) + Direction.Horizontal = Horizontal {0,0},2" <| fun _ -> 
         let shift = 
@@ -39,7 +39,7 @@ let shiftTests =
             let shift = Compose [Horizontal ({X = 0; Y = 0;},1);Vertical({X = 1; Y =0},1) ;Horizontal({X=1; Y =1},1)]
             Shift.applyDirection (Start) Direction.Horizontal shift
         match shift.Last with 
-        | Horizontal({X = 1; Y = 0},1) -> pass()
+        | Horizontal({X = 2; Y = 0},0) -> pass()
         | _ -> fail()
 
   ]
@@ -134,7 +134,7 @@ let matrixTests =
                         (mxText "Cross_1A") 
                         (r2 (mxText "Cross_1B") (c2 (mxText "Cross_1C") (mxText "Cross_1D")))
                         (fun a -> mxText "Cross_1E" a)
-                    )
+                    )   
                 
         //pass()
         match results with 
@@ -198,7 +198,7 @@ let matrixTests =
         | [("Cross_2A",("Cross_2B", "Cross_2C", ("Cross_2D","Cross_2E")))] -> pass()
         | _ -> fail()
 
-    testCase "cross area3" <| fun _ -> 
+    testCase "cross area3-1" <| fun _ -> 
         let results = 
             runMatrixParser 
                 worksheet 
@@ -217,7 +217,7 @@ let matrixTests =
         | [("Cross_3A", ("Cross_3B", ("Cross_3C", ("Cross_3D","Cross_3E")),"Cross_3F"))] -> pass()
         | _ -> fail()
 
-    testCase "cross area4" <| fun _ -> 
+    testCase "cross area3-2" <| fun _ -> 
         let results = 
             runMatrixParser 
                 worksheet 
@@ -235,6 +235,55 @@ let matrixTests =
 
         match results with
         | [("Cross_3A", ("Cross_3B", ("Cross_3C", ("Cross_3D","Cross_3E")),"Cross_3F"))] -> pass()
+        | _ -> fail()
+
+
+    testCase "cross area5" <| fun _ -> 
+        let results = 
+            let parser2 =
+                let header = 
+                    (mxTextf (fun text ->
+                        [
+                            "Cross_4B"
+                            "Cross_4C"
+                            "Cross_4D"
+                        ] |> List.contains text
+                    ))
+                    |> mxRowMany1
+
+                let last =
+                    mxText "Cross_4E"
+
+                r2 
+                    header
+                    (mxUntilA10 last)
+
+            let mxRowMany1Test x = 
+                fun inputStream ->
+                    mxRowMany1 x inputStream
+
+            let parser3 =
+                mxRowMany1Test(
+                    c3
+                        (mxTextf (fun m -> m.StartsWith "Cross_4"))
+                        (mxTextf (fun m -> m.StartsWith "Cross_4"))
+                        (mxTextf (fun m -> m.StartsWith "Cross_4"))
+                )
+
+
+
+            runMatrixParser 
+                worksheet 
+                (
+                    c3
+                        (mxText "Cross_4A")
+                        parser2
+                        parser3
+                )
+
+                   
+        match results with
+        | [("Cross_4A", (["Cross_4B"; "Cross_4C"; "Cross_4D"],"Cross_4E"),[ "Cross_4F", "Cross_4G", "Cross_4H" ; "Cross_4I", "Cross_4J", "Cross_4K"] )] -> pass()
         | _ -> fail()
 
 
@@ -285,6 +334,7 @@ let matrixTests =
         | ("mx_until1", ("mx_until4")) :: _  -> pass()
         | _ -> fail()
 
+
     testCase "cross area1 reRange" <| fun _ -> 
         let userRange = ExcelWorksheet.getUserRangeList worksheet
         let results = 
@@ -334,6 +384,8 @@ let matrixTests =
         |> function
             | ["Cross_2A"; "Cross_2B";"Cross_2C";"Cross_2D";"Cross_2E"] :: _ -> pass()
             | _ -> fail()
+
+
 
     testCase "mxMergeStarter" <| fun _ -> 
         let results = runMatrixParser worksheet (mxMergeStarter ||>> fun mergeStarter -> mergeStarter.Text)
