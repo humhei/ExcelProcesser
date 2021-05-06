@@ -7,13 +7,17 @@ open FParsec
 open OfficeOpenXml
 open System.IO
 open MathParsers
+open CellScript.Core
 
 let pass() = Expect.isTrue true "passed"
 let fail() = Expect.isTrue false "failed"
 
 let excelPackage = new ExcelPackage(FileInfo(XLPath.testData))
 
-let worksheet = excelPackage.Workbook.Worksheets.["Math"]
+let worksheet = 
+    excelPackage.Workbook.Worksheets.["Math"]
+    |> ValidExcelWorksheet
+
 
 let mathTests =
   testList "MathTests" [

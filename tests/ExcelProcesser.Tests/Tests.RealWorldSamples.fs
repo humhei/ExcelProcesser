@@ -7,6 +7,7 @@ open FParsec
 open OfficeOpenXml
 open System.IO
 open Deedle
+open CellScript.Core
 
 let pass() = Expect.isTrue true "passed"
 let fail() = Expect.isTrue false "failed"
@@ -24,10 +25,10 @@ let mergeColumnOn columnKey (infoFrame: Frame<_, _>) (primaryFrame: Frame<_, _>)
 
 let realWorldSamples =
   testList "Real world samples" [
-    testCase "19SPX16" <| fun _ -> 
+    ftestCase "19SPX16" <| fun _ -> 
         use excelPackage = new ExcelPackage(FileInfo(XLPath.RealWorldSamples.``19SPX16合同附件``))
         
-        let worksheet = excelPackage.Workbook.Worksheets.["Sheet1"]
+        let worksheet = ValidExcelWorksheet(excelPackage.Workbook.Worksheets.["Sheet1"])
 
         let record = Types.XLPath.RealWorldSamples.Module_嘴唇.Record.Parse(worksheet)
 

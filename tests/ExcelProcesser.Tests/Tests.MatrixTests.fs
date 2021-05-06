@@ -7,13 +7,16 @@ open FParsec
 open OfficeOpenXml
 open System.IO
 open ExcelProcesser.Extensions
+open CellScript.Core
 
 let pass() = Expect.isTrue true "passed"
 let fail() = Expect.isTrue false "failed"
 
 let excelPackage = new ExcelPackage(FileInfo(XLPath.testData))
 
-let worksheet = excelPackage.Workbook.Worksheets.["Matrix"]
+let worksheet = 
+    excelPackage.Workbook.Worksheets.["Matrix"]
+    |> ValidExcelWorksheet
 
 let shiftTests =
   ptestList "ShiftTests" [
@@ -315,10 +318,9 @@ let matrixTests =
         | _ -> fail()
 
     testCase "column many with skip backtrack" <| fun _ -> 
-        let userRange = ExcelWorksheet.getUserRangeList worksheet
         let results = 
-            runMatrixParserForRangesWithStreamsAsResult
-                userRange
+            runMatrixParserWithStreamsAsResult
+                worksheet
                 (mxColManySkip mxSpace 1 (mxTextf(fun text -> text.StartsWith "cm_skip_backTrack")))
         match results.[0].Shift.Last with 
         | Horizontal ({X = 0; Y = 0},2)  -> pass()
@@ -336,10 +338,9 @@ let matrixTests =
 
 
     testCase "cross area1 reRange" <| fun _ -> 
-        let userRange = ExcelWorksheet.getUserRangeList worksheet
         let results = 
-            runMatrixParserForRangesWithStreamsAsResult  
-                userRange
+            runMatrixParserWithStreamsAsResult
+                worksheet
                 (r2
                     (r3
                         (c3 
@@ -363,10 +364,9 @@ let matrixTests =
             | _ -> fail()
 
     testCase "cross area2 reRange" <| fun _ -> 
-        let userRange = ExcelWorksheet.getUserRangeList worksheet
         let results = 
-            runMatrixParserForRangesWithStreamsAsResult  
-                userRange
+            runMatrixParserWithStreamsAsResult
+                worksheet
                 (c2 
                     (mxText "Cross_2A") 
                     (r3 

@@ -9,12 +9,15 @@ open System.IO
 open SematicsParsers
 open ExcelProcesser.Extensions
 
+
 let pass() = Expect.isTrue true "passed"
 let fail() = Expect.isTrue false "failed"
 
 let excelPackage = new ExcelPackage(FileInfo(XLPath.testData))
 
-let worksheet = excelPackage.Workbook.Worksheets.["Sematics"]
+let worksheet = 
+    excelPackage.Workbook.Worksheets.["Sematics"]
+    |> CellScript.Core.Types.ValidExcelWorksheet
 
 let sematicsParsers =
   testList "SematicsParsers" [
@@ -37,13 +40,10 @@ let sematicsParsers =
         | _ -> fail()
 
     testCase "twoRowHeaderPivotTable" <| fun _ -> 
-        let userRange = 
-            worksheet
-            |> ExcelWorksheet.getUserRangeList
 
         let results = 
-            runMatrixParserForRangesWithStreamsAsResult
-                userRange 
+            runMatrixParserWithStreamsAsResult
+                worksheet
                 (mxTwoHeadersPivotTable 
                     (mxFParsec (pstringCI "ORDER NO.")) 
                     (mxFParsec (pstringCI "Pairs")) 

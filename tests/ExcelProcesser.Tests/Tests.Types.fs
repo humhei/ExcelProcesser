@@ -9,6 +9,7 @@ open System.Collections
 open System.Linq
 open ExcelProcesser.Extensions
 open Deedle
+open CellScript.Core
 
 
 
@@ -167,7 +168,7 @@ module XLPath =
                     |> Frame.ofRecords 
 
 
-                static member Parse(worksheet: ExcelWorksheet) =
+                static member Parse(worksheet: ValidExcelWorksheet) =
                     let order = 
                         let parser =
                             mxFParsec (pstring "合同" >>. many1Chars (asciiLetter <|> digit) .>> pstring "生产细节")

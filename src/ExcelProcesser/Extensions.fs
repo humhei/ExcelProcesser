@@ -9,6 +9,8 @@ open System.Text.RegularExpressions
 open OfficeOpenXml.Style
 open System
 open System.IO
+open CellScript.Core
+open Shrimp.FSharp.Plus
 
 type LoggerLevel = 
     | Trace_Red = 0
@@ -88,7 +90,7 @@ module Extensions =
         let private getMaxRowNumber (worksheet:ExcelWorksheet) =
             worksheet.Dimension.End.Row
 
-        let getUserRangeList worksheet =
+        let getUserRangeList (worksheet: ExcelWorksheet) =
             [ let maxRow = getMaxRowNumber worksheet
               let maxCol = getMaxColNumber worksheet
               for i in 1..maxRow do

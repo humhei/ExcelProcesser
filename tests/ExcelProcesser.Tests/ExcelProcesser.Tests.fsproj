@@ -5,6 +5,7 @@
     <TargetFramework>net5.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="Script1.fsx" />
     <None Include="resources\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
@@ -15,6 +16,7 @@
     <Compile Include="Tests.RealWorldSamples.fs" />
     <Compile Include="Tests.Runner.fs" />
   </ItemGroup>
+  <ItemGroup />
   <ItemGroup>
     <PackageReference Include="Expecto" Version="8.10.1" />
   </ItemGroup>

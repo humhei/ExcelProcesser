@@ -4,6 +4,8 @@ open OfficeOpenXml
 open Extensions
 open CellParsers
 open FParsec.CharParsers
+open CellScript.Core
+open Shrimp.FSharp.Plus
 
 type Direction =
     | Horizontal = 0
@@ -402,7 +404,10 @@ module LoggerExtensions =
             ||>> (fun result ->
                 match ExcelProcesserLoggerLevel with 
                 | LoggerLevel.Trace_Red ->
-                    NLog.LogManager.GetCurrentClassLogger().Error(sprintf "Name: %s\nResult: %A" name result)
+                    let log = NLog.LogManager.GetCurrentClassLogger()
+
+                    log.Error(sprintf "Name: %s\nResult: %A" name result)
+
                 | LoggerLevel.Slient -> ()
 
                 result
@@ -843,30 +848,20 @@ let runMatrixParserForRange (range : ExcelRangeBase) (p : MatrixParser<_>) =
     let mses = runMatrixParserForRangesWithStreamsAsResult ranges p
     mses |> List.map (fun ms -> ms.Result.Value)
 
-let runMatrixParser (worksheet: ExcelWorksheet) (p: MatrixParser<_>) =
-    match worksheet with 
-    | null -> 
-        failwithf "Work sheet is empty, please check xlsx file"
-    | _ ->
-        match worksheet.Hidden with 
-        | eWorkSheetHidden.Visible ->
-            let userRange = 
-                worksheet
-                |> ExcelWorksheet.getUserRangeList
+let runMatrixParserWithStreamsAsResult (worksheet: ValidExcelWorksheet) (p: MatrixParser<_>) =
+    let userRange = 
+        worksheet.Value
+        |> ExcelWorksheet.getUserRangeList
 
-            runMatrixParserForRanges userRange p
+    runMatrixParserForRangesWithStreamsAsResult userRange p
 
-        | eWorkSheetHidden.Hidden | eWorkSheetHidden.VeryHidden -> []
+let runMatrixParser (worksheet: ValidExcelWorksheet) (p: MatrixParser<_>) =
+    let userRange = 
+        worksheet.Value
+        |> ExcelWorksheet.getUserRangeList
+
+    runMatrixParserForRanges userRange p
+  
 
 
-let runMatrixParserIncludingHiddenSheets (worksheet: ExcelWorksheet) (p: MatrixParser<_>) =
-    match worksheet with 
-    | null -> 
-        failwithf "Work sheet is empty, please check xlsx file"
-    | _ ->
-        let userRange = 
-            worksheet
-            |> ExcelWorksheet.getUserRangeList
-
-        runMatrixParserForRanges userRange p
 
