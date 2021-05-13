@@ -17,27 +17,24 @@ module Operators =
 
     [<RequireQualifiedAccess>]
     type private LoggerMsg =
-        | Info of string
+        | Info of AsyncReplyChannel<unit> * string
 
     type Logger(loggerLevel: LoggerLevel) =
-        let mailbox = MailboxProcessor.Start(fun inbox ->
-            let nlog = NLog.LogManager.GetCurrentClassLogger()
-            
-            let rec loop (traces: List<string>) = async {
-                let! msg = inbox.Receive()
-                match msg with 
-                | LoggerMsg.Info message -> 
-                    match loggerLevel with 
-                    | LoggerLevel.Trace_Red  -> 
-                        nlog.Error message
-                        traces.Add(message)
-                        return! loop traces
-                    | LoggerLevel.Slient -> ()
+        let nlog = NLog.LogManager.GetCurrentClassLogger()
 
-            }
-            loop (new List<_>())
-        
-        )
+        let messages = new List<string>()
 
-        member x.Info line = mailbox.Post (LoggerMsg.Info line)
+        member x.Info (message: string) = 
+            match loggerLevel with 
+            | LoggerLevel.Trace_Red  -> 
+                nlog.Error message
+                messages.Add(message)
+            | LoggerLevel.Slient -> ()
 
+
+        member x.Messages() = List.ofSeq messages
+
+    let ensureFParsecValid text parser  =
+        match run parser text with 
+        | Success _ -> parser
+        | Failure (error, _, _) -> failwith error

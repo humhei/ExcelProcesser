@@ -233,7 +233,8 @@ module internal SingletonExcelRangeBase =
 
 type InputMatrixStream = 
     { Range: SingletonExcelRangeBase
-      Shift: Shift }
+      Shift: Shift
+      Logger: Logger }
 with 
     member private x.LastCellShift = x.Shift.Last
 
@@ -246,12 +247,14 @@ type OutputMatrixStreamResult<'result> =
 type OutputMatrixStream<'result> =
     { Range: SingletonExcelRangeBase
       Shift: Shift
+      Logger: Logger
       Result: OutputMatrixStreamResult<'result> }
 
 with 
     member x.AsInputStream =
         { Range = x.Range 
-          Shift = x.Shift }
+          Shift = x.Shift
+          Logger = x.Logger }
 
     member private x.LastCellShift = x.Shift.Last
 
@@ -296,16 +299,19 @@ module OutputMatrixStream =
                 Shift = Shift.applyDirection preInputstream.Shift direction stream.Shift }
 
     let mapResult mapping (stream: OutputMatrixStream<'result>) =
+        
         { Range = stream.Range 
           Shift = stream.Shift 
-          Result = mapping stream.Result }
+          Result = mapping stream.Result
+          Logger = stream.Logger }
 
     let mapResultValue mapping (stream: OutputMatrixStream<'result>) =
         { Range = stream.Range 
           Shift = stream.Shift 
           Result = 
             { Value = mapping stream.Result.Value
-              IsSkip = stream.Result.IsSkip }}
+              IsSkip = stream.Result.IsSkip }
+          Logger = stream.Logger }
 
 
 [<RequireQualifiedAccess>]
@@ -352,17 +358,17 @@ let mxCellParserOp (cellParser: SingletonExcelRangeBase -> 'result option) =
                   Result = 
                     { IsSkip = false
                       Value = result }
+                  Logger = stream.Logger
                 }
             ]
-        | None -> 
-            //match ExcelProcesserLoggerLevel with 
-            //| LoggerLevel.Slient -> ()
-            //| LoggerLevel.Error -> 
-            //    let error = 
-            //        sprintf "Parsing %O with %A failed" offsetedRange.Value.Address cellParser
-                
-            //    NLog.LogManager.GetCurrentClassLogger().Error(error)
-            []
+        | None -> []
+
+//let mxCellParser_Result (cellParser: SingletonExcelRangeBase -> Result<'ok, string>) =
+//    mxCellParserOp (fun range ->
+//        match cellParser range with 
+//        | Result.Ok v -> Some v
+//        | Result.Error error -> 
+//    )
 
 let mxCellParser (cellParser: CellParser) getResult =
     fun range ->
@@ -375,6 +381,7 @@ let mxCellParser (cellParser: CellParser) getResult =
 let mxFParsec p =
     mxCellParserOp (pFParsec p)
 
+
 let mxFParsecInt32 inputStream = mxFParsec (pint32) inputStream
 
 let mxText text =
@@ -382,6 +389,21 @@ let mxText text =
 
 let mxTextf f =
     mxCellParser (pTextf f) ExcelRangeBase.getText
+
+let mxTextOp picker =
+    mxCellParserOp (fun range ->
+        picker range.Value.Text
+    )
+
+
+let mxRegex pattern =
+    mxCellParser (pTextf (fun text -> 
+        match text with 
+        | ParseRegex.Head pattern _ -> true
+        | _ -> false
+    )) ExcelRangeBase.getText
+
+let mxWord = mxRegex "\w" 
 
 let mxSpace inputStream = mxCellParser pSpace ignore inputStream
 
@@ -400,18 +422,27 @@ let (||>>) p f =
 module LoggerExtensions =
     module MatrixParser =
         let addLogger name (parser: MatrixParser<_>) = 
-            parser
-            ||>> (fun result ->
-                match ExcelProcesserLoggerLevel with 
-                | LoggerLevel.Trace_Red ->
-                    let log = NLog.LogManager.GetCurrentClassLogger()
+            fun (inputStream: InputMatrixStream) ->
+                let logger = inputStream.Logger
 
-                    log.Error(sprintf "Name: %s\nResult: %A" name result)
+                let outputStreams = parser inputStream
+                if not outputStreams.IsEmpty 
+                then logger.Info (sprintf "BEGIN %s:" name)
 
-                | LoggerLevel.Slient -> ()
+                for outputStream in outputStreams do
+                    let message =   
+                        let addr = 
+                            outputStream.Range.Value.Address
+                
+                        sprintf $"\t{addr}: {outputStream.Result.Value}"
 
-                result
-            )
+                    logger.Info message
+
+                if not outputStreams.IsEmpty 
+                then logger.Info (sprintf "END %s:" name)
+
+                outputStreams
+
 
 
 let (|||>>) p f = 
@@ -440,12 +471,21 @@ let (<&!>) (p1: MatrixParser<'result>) (p2: MatrixParser<'exclude>) =
         | List.Some _ -> []
         | _ -> p1 inputStream
 
-let (<&>) (p1: MatrixParser<'result>) (p2: MatrixParser<'predicate>) = 
+let (<.&>) (p1: MatrixParser<'result>) (p2: MatrixParser<'predicate>) = 
     fun inputStream ->
         match p1 inputStream with 
         | List.Some outputStreams1 -> 
             match p2 inputStream with 
             | List.Some _ -> outputStreams1
+            | List.None -> []
+        | List.None -> []
+
+let (<&>) (p1: MatrixParser<'predicate>) (p2: MatrixParser<'result>) = 
+    fun inputStream ->
+        match p1 inputStream with 
+        | List.Some outputStreams1 -> 
+            match p2 inputStream with 
+            | List.Some outputStreams2 -> outputStreams2
             | List.None -> []
         | List.None -> []
 
@@ -565,6 +605,7 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
                 let last = List.last outputStreams
                 { Range = last.Range 
                   Shift = last.Shift 
+                  Logger = last.Logger
                   Result = 
                     { IsSkip = false
                       Value = 
@@ -578,6 +619,7 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
             | _ -> 
                 { Range = inputStream.Range
                   Shift = inputStream.Shift
+                  Logger = inputStream.Logger
                   Result = 
                     { IsSkip = true
                       Value = []
@@ -824,18 +866,22 @@ let r8 p1 p2 p3 p4 p5 p6 p7 p8 =
         a, b, c, d, e, f, g, h
     )
 
-let runMatrixParserForRangesWithStreamsAsResult (ranges : seq<SingletonExcelRangeBase>) (p : MatrixParser<_>) =
+let private runMatrixParserForRangesWithStreamsAsResult_Common logger (ranges : seq<SingletonExcelRangeBase>) (p : MatrixParser<_>) =
     let inputStreams = 
         ranges 
         |> List.ofSeq
         |> List.map (fun range ->
             { Range = range 
-              Shift = Shift.Start }
+              Shift = Shift.Start
+              Logger = logger }
         )
 
     inputStreams 
     |> List.collect p
 
+
+let runMatrixParserForRangesWithStreamsAsResult (ranges : seq<SingletonExcelRangeBase>) (p : MatrixParser<_>) =
+    runMatrixParserForRangesWithStreamsAsResult_Common (new Logger(LoggerLevel.Slient)) ranges p
 
 let runMatrixParserForRanges (ranges : seq<SingletonExcelRangeBase>) (p : MatrixParser<_>) =
     let mses = runMatrixParserForRangesWithStreamsAsResult ranges p
@@ -855,6 +901,8 @@ let runMatrixParserWithStreamsAsResult (worksheet: ValidExcelWorksheet) (p: Matr
 
     runMatrixParserForRangesWithStreamsAsResult userRange p
 
+
+
 let runMatrixParser (worksheet: ValidExcelWorksheet) (p: MatrixParser<_>) =
     let userRange = 
         worksheet.Value
@@ -863,5 +911,23 @@ let runMatrixParser (worksheet: ValidExcelWorksheet) (p: MatrixParser<_>) =
     runMatrixParserForRanges userRange p
   
 
+let runMatrixParserWithStreamsAsResultSafe (worksheet: ValidExcelWorksheet) (p: MatrixParser<_>) =
+    let userRange = 
+        worksheet.Value
+        |> ExcelWorksheet.getUserRangeList
 
+    let logger = new Logger(LoggerLevel.Trace_Red)
+
+    match runMatrixParserForRangesWithStreamsAsResult_Common logger userRange p with 
+    | [] -> 
+        match logger.Messages() with 
+        | [] -> failwithf "All named parsed are parsed failured %A" p
+        | _ ->
+            failwithf "%A" (logger.Messages())
+    | outputStreams -> (AtLeastOneList.Create outputStreams)
+
+
+let runMatrixParserSafe (worksheet: ValidExcelWorksheet) (p: MatrixParser<_>) =
+    runMatrixParserWithStreamsAsResultSafe worksheet p
+    |>AtLeastOneList.map (fun m -> m.Result.Value)
 

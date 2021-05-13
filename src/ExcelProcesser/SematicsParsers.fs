@@ -6,6 +6,7 @@ open System
 open ExcelProcesser.MathParsers
 open Extensions
 open Deedle
+open Shrimp.FSharp.Plus
 
 [<AutoOpen>]
 module internal InternalExtensions =
@@ -110,7 +111,11 @@ let mxGroupingColumnsHeader (defaultGroupedHeaderText: string option) pChild =
     |||>> fun outputStream ((groupedHeader, _), childHeaders) -> 
         { GroupedHeader = 
             match defaultGroupedHeaderText with 
-            | None -> groupedHeader.Text
+            | None -> 
+                match groupedHeader.Text.Trim() with 
+                | "" -> "GroupedHeader"
+                | groupedHeaderText -> groupedHeaderText
+
             | Some text -> text
           ChildHeaders = childHeaders
           Shift = outputStream.Shift }
@@ -143,7 +148,7 @@ let mxGroupingColumn (GroupingColumnParserArg_(defaultGroupedHeaderText, pChildH
                 reranged.End.Column, reranged.Columns
 
             let pElementInRange =
-                pElement <&> (mxCellParser (fun range -> range.Value.Start.Column <= maxColNum) ignore)
+                pElement <.&> (mxCellParser (fun range -> range.Value.Start.Column <= maxColNum) ignore)
 
 
             match pElementSkip with 
@@ -170,7 +175,7 @@ type TwoHeadersPivotTableBorder<'leftBorderHeader,'numberHeader,'rightBorderHead
 
 let private mxTwoHeadersPivotTableBorder pLeftBorderHeader pNumberHeader pRightBorderHeader =
     c3 
-        (pLeftBorderHeader <&> mxMergeStarter)
+        (pLeftBorderHeader <.&> mxMergeStarter)
         (mxUntilA50
             (r2 
                 (pNumberHeader <&> mxMergeStarter)
@@ -214,10 +219,91 @@ module NormalColumn =
                 )
         }
 
+
+
+type GroupingElement<'groupingColumnChildHeader, 'groupingColumnElement> =
+    {
+        IndexInHeaders: int
+        Header: 'groupingColumnChildHeader
+        Element: 'groupingColumnElement
+    }
+
+type TwoHeadersPivotTableRow<'groupingColumnChildHeader, 'groupingColumnElement> =
+    { GroupingElments: AtLeastOneList<GroupingElement<'groupingColumnChildHeader, 'groupingColumnElement>>
+      NormalValueObservations: ObjectSeries<StringIC>
+    }
+
 type TwoHeadersPivotTable<'groupingColumnChildHeader, 'groupingColumnElement> =
     { GroupingColumn: GroupingColumn<'groupingColumnChildHeader, 'groupingColumnElement>
       NormalColumns: NormalColumn list
       SumNumber: int }
+
+with 
+    member this.Rows(?fixEmptyUp: bool) =
+        let fixEmptyUp = defaultArg fixEmptyUp true
+        let basicRows = 
+            this.GroupingColumn.ElementsList
+            |> List.indexed
+            |> List.choose (fun (i, elements) ->
+                let groupingElements =
+                    let childHeaders = this.GroupingColumn.Header.ChildHeaders
+                    elements
+                    |> List.mapi(fun j element ->
+                        match element with
+                        | Some element -> 
+                            { IndexInHeaders = j
+                              Header = childHeaders.[j]
+                              Element = element }
+                            |> Some
+                        | None -> None
+                    )
+                    |> List.choose id
+
+                match groupingElements with 
+                | [] -> None
+                | _ -> 
+                    {
+                        NormalValueObservations = 
+                            this.NormalColumns
+                            |> List.map(fun normalColumn -> 
+                                StringIC normalColumn.Header => normalColumn.Contents.[i]
+                            )
+                            |> Series.ofObservations
+                            |> ObjectSeries
+                        GroupingElments = AtLeastOneList.Create groupingElements
+                    }
+                    |> Some
+            )
+        
+        match fixEmptyUp with 
+        | true ->
+            (None, basicRows)
+            ||> List.mapFold (fun previousRow (basicRow) ->
+                match previousRow with 
+                | None -> basicRow, Some basicRow
+                | Some previousRow -> 
+                    let previousRowNormalValueObsevations = previousRow.NormalValueObservations
+                    let newBasicRow = 
+                        { 
+                            basicRow with 
+                                NormalValueObservations =
+                                    basicRow.NormalValueObservations
+                                    |> Series.mapAll(fun key value ->
+                                        match value with 
+                                        | None -> 
+                                            match previousRowNormalValueObsevations.TryGet(key) with 
+                                            | OptionalValue.Missing -> None
+                                            | OptionalValue.Present v -> Some v
+                                        | Some value ->  Some (value)
+                                    )
+                                    |> ObjectSeries
+                        }
+                    newBasicRow, Some newBasicRow
+            )|> fst
+
+        | false -> basicRows
+
+        
 
 type TwoHeadersPivotTable =
     static member private FixEmptyUp twoHeadersPivotTable =
@@ -240,7 +326,8 @@ type TwoHeadersPivotTable =
         
         let baseTable = 
             let normalColumnsHeaders = 
-                List.map (fun column -> column.Header) twoHeadersPivotTable.NormalColumns 
+                twoHeadersPivotTable.NormalColumns 
+                |> List.map (fun column -> column.Header) 
             
             let contentFrame = 
                 twoHeadersPivotTable.NormalColumns 
@@ -262,6 +349,7 @@ type TwoHeadersPivotTable =
                 | None -> None
             )
         )
+        |> Frame.mapColKeys StringIC
 
     static member ToArray2D (twoHeadersPivotTable, ?fixEmptyUp) =
         TwoHeadersPivotTable.ToFrame(twoHeadersPivotTable, ?fixEmptyUp = fixEmptyUp)
@@ -281,7 +369,8 @@ let mxTwoHeadersPivotTable pLeftBorderHeader pNumberHeader pRightBorderHeader pG
 
         let resetedInputStream = 
             { Range = range
-              Shift = Shift.Start }
+              Shift = Shift.Start
+              Logger = outputStream.Logger }
 
         let p = 
             c3 

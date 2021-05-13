@@ -12,7 +12,7 @@
     <Compile Include="SematicsParsers.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="CellScript.Core" Version="0.1.103"/>
+    <PackageReference Include="CellScript.Core" Version="0.1.127"/>
     <PackageReference Include="Deedle" Version="2.1.2" />
     <PackageReference Include="EPPlus" Version="4.5.3.3" />
     <PackageReference Include="FParsec" Version="1.1.1" />

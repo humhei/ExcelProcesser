@@ -50,7 +50,11 @@ let shiftTests =
 let matrixTests =
   testList "MatrixTests" [
     testCase "mxText" <| fun _ -> 
-        let results = runMatrixParser worksheet (mxText "mxTextA")
+        let parser =
+            (mxText "mxTextA")
+            |> MatrixParser.addLogger "mxTextA"
+
+        let results = runMatrixParser worksheet parser
         match results with 
         | ["mxTextA"] -> pass()
         | _ -> fail()

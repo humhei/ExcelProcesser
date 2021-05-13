@@ -25,7 +25,7 @@ let mergeColumnOn columnKey (infoFrame: Frame<_, _>) (primaryFrame: Frame<_, _>)
 
 let realWorldSamples =
   testList "Real world samples" [
-    ftestCase "19SPX16" <| fun _ -> 
+    testCase "19SPX16" <| fun _ -> 
         use excelPackage = new ExcelPackage(FileInfo(XLPath.RealWorldSamples.``19SPX16合同附件``))
         
         let worksheet = ValidExcelWorksheet(excelPackage.Workbook.Worksheets.["Sheet1"])

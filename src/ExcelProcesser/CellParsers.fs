@@ -32,6 +32,10 @@ let pTextf (f : string -> bool) = fun (cell : SingletonExcelRangeBase) -> f cell
 
 let pTextContain text = pTextf (fun cellText -> cellText.Contains text)
 
+let pTextContainCI (text: string) = pTextf (fun cellText -> 
+    cellText.ToLowerInvariant().Contains(text.ToLowerInvariant())
+)
+
 let pText text = pTextf (fun cellText -> cellText = text)
 
 let pStyleName (styleName : string) : CellParser =
@@ -39,7 +43,7 @@ let pStyleName (styleName : string) : CellParser =
 
 let pRegex pattern : CellParser =
     pTextf (fun text ->
-        let m = Regex.Match(text, pattern)
+        let m = Regex.Match(text, pattern, RegexOptions.IgnoreCase)    
         m.Success)
 
 let pFormula (firstFormula : Formula) =

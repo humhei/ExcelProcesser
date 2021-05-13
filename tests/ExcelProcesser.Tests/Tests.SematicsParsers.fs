@@ -39,7 +39,7 @@ let sematicsParsers =
         | [1; 2; 2; 2; 2; 2; 1; 1] :: [1; 1; 1; 2; 2; 1; 1; 1] :: [1] :: [1] :: [1] :: [1] :: [1] :: _ -> pass()
         | _ -> fail()
 
-    testCase "twoRowHeaderPivotTable" <| fun _ -> 
+    ftestCase "twoRowHeaderPivotTable" <| fun _ -> 
 
         let results = 
             runMatrixParserWithStreamsAsResult
@@ -48,9 +48,17 @@ let sematicsParsers =
                     (mxFParsec (pstringCI "ORDER NO.")) 
                     (mxFParsec (pstringCI "Pairs")) 
                     (mxFParsec (pstringCI "Volume")) 
-                    (GroupingColumnParserArg.Create(mxFParsec pint32, Some mxSpace, mxFParsec pint32, "Size"))
+                    (GroupingColumnParserArg.Create(
+                        pChildHeader = mxFParsec pint32,
+                        pElementSkip = Some mxSpace,
+                        pElement = mxFParsec pint32, 
+                        defaultGroupedHeaderText = "Size"))
                 )
         
+        let rows = results.[0].Result.Value.Rows()
+
+        Expect.equal rows.Length 7 "pass"
+
         Expect.equal results.Length 1 "pass"
         
         let array2D = TwoHeadersPivotTable.ToArray2D results.[0].Result.Value
