@@ -139,6 +139,13 @@ type GroupingColumnParserArg =
         GroupingColumnParserArg_(defaultGroupedHeaderText, pChildHeader, pElementSkip, pElement)
 
 let mxGroupingColumn (GroupingColumnParserArg_(defaultGroupedHeaderText, pChildHeader, pElementSkip, pElement)) =
+    let pChildHeader = 
+        MatrixParser.addLogger LoggerLevel.Info "pChildHeader" pChildHeader
+    
+    let pElement = 
+        MatrixParser.addLogger LoggerLevel.Info "pElement" pElement
+    
+
     (r2R 
         (mxGroupingColumnsHeader defaultGroupedHeaderText pChildHeader)
         (fun outputStream ->
@@ -359,6 +366,15 @@ type TwoHeadersPivotTable =
 
 let mxTwoHeadersPivotTable pLeftBorderHeader pNumberHeader pRightBorderHeader pGroupingColumn =
     
+    let pLeftBorderHeader = 
+        MatrixParser.addLogger LoggerLevel.Info "pLeftBorderHeader" pLeftBorderHeader
+
+    let pNumberHeader = 
+        MatrixParser.addLogger LoggerLevel.Info "pNumberHeader" pNumberHeader
+
+    let pRightBorderHeader = 
+        MatrixParser.addLogger LoggerLevel.Info "pRightBorderHeader" pRightBorderHeader
+
     mxTwoHeadersPivotTableBorder pLeftBorderHeader pNumberHeader pRightBorderHeader
     |> MatrixParser.collectOutputStream (fun outputStream ->
         let reranged = OutputMatrixStream.reRange outputStream

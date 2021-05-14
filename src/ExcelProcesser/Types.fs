@@ -1,4 +1,6 @@
-﻿namespace ExcelProcesser
+﻿
+
+namespace ExcelProcesser
 #nowarn "0104"
 open FParsec
 open System.Drawing
@@ -8,6 +10,7 @@ open OfficeOpenXml.Style
 open System
 open System.IO
 open System.Collections.Generic
+open NLog
 
 type Formula =
     | SUM = 0
@@ -15,24 +18,48 @@ type Formula =
 [<AutoOpen>]
 module Operators =
 
-    [<RequireQualifiedAccess>]
-    type private LoggerMsg =
-        | Info of AsyncReplyChannel<unit> * string
 
-    type Logger(loggerLevel: LoggerLevel) =
-        let nlog = NLog.LogManager.GetCurrentClassLogger()
+    let nlog = NLog.LogManager.GetCurrentClassLogger()
 
-        let messages = new List<string>()
+    type Messages =
+        { Infos: string list 
+          Importants: string list
+          AllMessages: string list }
+    with 
+        member x.IsEmpty = x.Infos.IsEmpty && x.Importants.IsEmpty
 
-        member x.Info (message: string) = 
+
+
+    type Logger() =
+        do
+            GlobalDiagnosticsContext.Set("Application", "My cool app");
+        
+
+        let infos = new List<string>()
+        
+        let imports = new List<string>()
+        let allMessages = new List<string>()
+
+        member x.Log loggerLevel (message: string) = 
             match loggerLevel with 
-            | LoggerLevel.Trace_Red  -> 
+            | LoggerLevel.Info  -> 
+                nlog.Info message
+                infos.Add(message)
+                allMessages.Add(message)
+
+            | LoggerLevel.Important ->
                 nlog.Error message
-                messages.Add(message)
+                imports.Add(message)
+                allMessages.Add(message)
+
             | LoggerLevel.Slient -> ()
 
 
-        member x.Messages() = List.ofSeq messages
+        member x.Messages() = 
+            { Infos = List.ofSeq infos
+              Importants = List.ofSeq imports
+              AllMessages = List.ofSeq allMessages }
+
 
     let ensureFParsecValid text parser  =
         match run parser text with 

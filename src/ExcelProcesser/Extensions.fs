@@ -13,8 +13,9 @@ open CellScript.Core
 open Shrimp.FSharp.Plus
 
 type LoggerLevel = 
-    | Trace_Red = 0
-    | Slient = 1
+    | Info = 0
+    | Important = 1
+    | Slient = 2
 
 type SingletonExcelRangeBase = private SingletonExcelRangeBase of ExcelRangeBase
 with 

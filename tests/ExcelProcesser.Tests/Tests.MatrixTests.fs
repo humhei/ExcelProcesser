@@ -52,7 +52,7 @@ let matrixTests =
     testCase "mxText" <| fun _ -> 
         let parser =
             (mxText "mxTextA")
-            |> MatrixParser.addLogger "mxTextA"
+            |> MatrixParser.addLogger LoggerLevel.Important "mxTextA"
 
         let results = runMatrixParser worksheet parser
         match results with 

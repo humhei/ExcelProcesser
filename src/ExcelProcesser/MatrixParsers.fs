@@ -421,25 +421,27 @@ let (||>>) p f =
 [<AutoOpen>]
 module LoggerExtensions =
     module MatrixParser =
-        let addLogger name (parser: MatrixParser<_>) = 
+        let addLogger loggerLevel (name: string) (parser: MatrixParser<_>) = 
             fun (inputStream: InputMatrixStream) ->
                 let logger = inputStream.Logger
 
                 let outputStreams = parser inputStream
-                if not outputStreams.IsEmpty 
-                then logger.Info (sprintf "BEGIN %s:" name)
+                //if not outputStreams.IsEmpty 
+                //then logger.Log loggerLevel  (sprintf "BEGIN %s:" name)
+
+                let name =  
+                    (sprintf $"Parser: {name}").PadRight(30)
 
                 for outputStream in outputStreams do
                     let message =   
-                        let addr = 
-                            outputStream.Range.Value.Address
-                
-                        sprintf $"\t{addr}: {outputStream.Result.Value}"
+                        let range = ExcelRangeBase.offset outputStream.Shift outputStream.Range.Value
+                        let addr = range
+                        sprintf $"{name}\tResult: {addr}: {outputStream.Result.Value}"
 
-                    logger.Info message
+                    logger.Log loggerLevel message
 
-                if not outputStreams.IsEmpty 
-                then logger.Info (sprintf "END %s:" name)
+                //if not outputStreams.IsEmpty 
+                //then logger.Log loggerLevel (sprintf "END %s:" name)
 
                 outputStreams
 
@@ -881,7 +883,7 @@ let private runMatrixParserForRangesWithStreamsAsResult_Common logger (ranges : 
 
 
 let runMatrixParserForRangesWithStreamsAsResult (ranges : seq<SingletonExcelRangeBase>) (p : MatrixParser<_>) =
-    runMatrixParserForRangesWithStreamsAsResult_Common (new Logger(LoggerLevel.Slient)) ranges p
+    runMatrixParserForRangesWithStreamsAsResult_Common (new Logger()) ranges p
 
 let runMatrixParserForRanges (ranges : seq<SingletonExcelRangeBase>) (p : MatrixParser<_>) =
     let mses = runMatrixParserForRangesWithStreamsAsResult ranges p
@@ -916,13 +918,13 @@ let runMatrixParserWithStreamsAsResultSafe (worksheet: ValidExcelWorksheet) (p: 
         worksheet.Value
         |> ExcelWorksheet.getUserRangeList
 
-    let logger = new Logger(LoggerLevel.Trace_Red)
+    let logger = new Logger()
 
     match runMatrixParserForRangesWithStreamsAsResult_Common logger userRange p with 
     | [] -> 
-        match logger.Messages() with 
-        | [] -> failwithf "All named parsed are parsed failured %A" p
-        | _ ->
+        match logger.Messages().IsEmpty with 
+        | true -> failwithf "All named parsed are parsed failured %A" p
+        | false ->
             failwithf "%A" (logger.Messages())
     | outputStreams -> (AtLeastOneList.Create outputStreams)
 
