@@ -321,7 +321,12 @@ type MatrixStream<'result> =
 
 
 
-type MatrixParser<'result> =  InputMatrixStream -> OutputMatrixStream<'result> list
+type MatrixParser<'result>(invoke: InputMatrixStream -> OutputMatrixStream<'result> list) =
+    member x.Invoke = invoke
+
+    member x.Map(mapping) = 
+        mapping invoke
+        |> MatrixParser
 
 [<RequireQualifiedAccess>]
 module private List =
@@ -329,19 +334,22 @@ module private List =
         if list.Length = 0 then None
         else Some list
 
+let private map (matrixParser: MatrixParser<_>) mapping =
+    matrixParser.Map mapping
+
 [<RequireQualifiedAccess>]
 module MatrixParser =
-    let mapOutputStream f p =
+    let mapOutputStream f p = map p <| fun p ->
         fun (inputStream: InputMatrixStream) ->
             let (outputStreams: OutputMatrixStream<'result> list) = p inputStream
             List.map f outputStreams
 
-    let collectOutputStream f p : MatrixParser<_> =
+    let collectOutputStream f p : MatrixParser<_> = map p <| fun p ->
         fun (inputStream: InputMatrixStream) ->
             let (outputStreams: OutputMatrixStream<'result> list) = p inputStream
             List.collect f outputStreams
 
-    let filterOutputStreamByResultValue f p =
+    let filterOutputStreamByResultValue f p = map p <| fun p ->
         fun (inputStream: InputMatrixStream) ->
             let (outputStreams: OutputMatrixStream<'result> list) = p inputStream
             List.filter (fun outputStream -> f outputStream.Result.Value) outputStreams
@@ -362,7 +370,7 @@ let mxCellParserOp (cellParser: SingletonExcelRangeBase -> 'result option) =
                 }
             ]
         | None -> []
-
+    |> MatrixParser
 //let mxCellParser_Result (cellParser: SingletonExcelRangeBase -> Result<'ok, string>) =
 //    mxCellParserOp (fun range ->
 //        match cellParser range with 
@@ -382,7 +390,7 @@ let mxFParsec p =
     mxCellParserOp (pFParsec p)
 
 
-let mxFParsecInt32 inputStream = mxFParsec (pint32) inputStream
+let mxFParsecInt32 = mxFParsec (pint32) 
 
 let mxText text =
     mxCellParser (pText text) ExcelRangeBase.getText
@@ -405,15 +413,15 @@ let mxRegex pattern =
 
 let mxWord = mxRegex "\w" 
 
-let mxSpace inputStream = mxCellParser pSpace ignore inputStream
+let mxSpace = mxCellParser pSpace ignore 
 
 let mxStyleName styleName = mxCellParser (pStyleName styleName) ExcelRangeBase.getText
 
-let mxAnySkip inputStream = 
-    mxCellParser pAny ignore inputStream
+let mxAnySkip = 
+    mxCellParser pAny ignore 
 
-let mxAnyOrigin inputStream = 
-    mxCellParser pAny ExcelRangeBase.getText inputStream
+let mxAnyOrigin = 
+    mxCellParser pAny ExcelRangeBase.getText 
 
 let (||>>) p f = 
     MatrixParser.mapOutputStream (fun outputStream -> OutputMatrixStream.mapResultValue f outputStream) p
@@ -421,7 +429,7 @@ let (||>>) p f =
 [<AutoOpen>]
 module LoggerExtensions =
     module MatrixParser =
-        let addLogger loggerLevel (name: string) (parser: MatrixParser<_>) = 
+        let addLogger loggerLevel (name: string) (parser: MatrixParser<_>) = map parser <| fun parser ->
             fun (inputStream: InputMatrixStream) ->
                 let logger = inputStream.Logger
 
@@ -461,50 +469,55 @@ let mxOR (p1: MatrixParser<'result1>) (p2: MatrixParser<'result2>) =
         p2 ||>> Choice2Of2
 
     fun inputStream ->
-        match p1 inputStream with
+        match p1.Invoke inputStream with
         | List.Some streams -> streams
-        | _ -> p2 inputStream
-
+        | _ -> p2.Invoke inputStream
+    |> MatrixParser
 
 /// p1 && not p2
 let (<&!>) (p1: MatrixParser<'result>) (p2: MatrixParser<'exclude>) = 
     fun inputStream ->
-        match p2 inputStream with 
+        match p2.Invoke inputStream with 
         | List.Some _ -> []
-        | _ -> p1 inputStream
+        | _ -> p1.Invoke inputStream
+
+    |> MatrixParser
 
 let (<.&>) (p1: MatrixParser<'result>) (p2: MatrixParser<'predicate>) = 
     fun inputStream ->
-        match p1 inputStream with 
+        match p1.Invoke inputStream with 
         | List.Some outputStreams1 -> 
-            match p2 inputStream with 
+            match p2.Invoke inputStream with 
             | List.Some _ -> outputStreams1
             | List.None -> []
         | List.None -> []
 
+    |> MatrixParser
+
 let (<&>) (p1: MatrixParser<'predicate>) (p2: MatrixParser<'result>) = 
     fun inputStream ->
-        match p1 inputStream with 
+        match p1.Invoke inputStream with 
         | List.Some outputStreams1 -> 
-            match p2 inputStream with 
+            match p2.Invoke inputStream with 
             | List.Some outputStreams2 -> outputStreams2
             | List.None -> []
         | List.None -> []
+    |> MatrixParser
 
 
-let internal inDebug p =
+let internal inDebug (p: MatrixParser<_>) =
     fun inputStream -> 
-        let m = p inputStream
+        let m = p.Invoke inputStream
         match m with 
-        | List.Some m -> 
-            m
+        | List.Some m -> m
         | List.None -> []
+    |> MatrixParser
 
 let private pipe2RelativelyWithTupleStreamsReturn (direction: Direction) (p1: MatrixParser<'result1>) (buildP2: OutputMatrixStream<'result1> -> MatrixParser<'result2>) f =
 
     fun inputstream1 ->
 
-        let newStreams1 = p1 inputstream1
+        let newStreams1 = p1.Invoke inputstream1
         match newStreams1 with 
         | List.Some newStreams1 ->
             
@@ -512,7 +525,7 @@ let private pipe2RelativelyWithTupleStreamsReturn (direction: Direction) (p1: Ma
             |> List.collect (fun newStream1 ->
                 let p2 = buildP2 newStream1
                 let inputStream2 = (OutputMatrixStream.applyDirectionToShift direction inputstream1 newStream1).AsInputStream
-                p2 inputStream2
+                p2.Invoke inputStream2
                 |> List.map (fun newStream2 -> 
                     let newStream2 = 
                         OutputMatrixStream.mapResultValue (fun result ->
@@ -522,12 +535,12 @@ let private pipe2RelativelyWithTupleStreamsReturn (direction: Direction) (p1: Ma
                 )
             )
         | List.None -> []
-        
 
 
 let private pipe2Relatively (direction: Direction) (p1: MatrixParser<'result1>) (buildP2: OutputMatrixStream<'result1> -> MatrixParser<'result2>) f =
     pipe2RelativelyWithTupleStreamsReturn direction p1 buildP2 f
     >> List.map snd
+    |> MatrixParser
     
 
 let pipe2 direction p1 p2 f = 
@@ -550,7 +563,7 @@ let private atLeastTwo (p: MatrixParser<'a list>) =
         list.Length > 1
     )
 
-let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result>) = 
+let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result>) = map p <| fun p ->
     let isSkip outputStream = 
         outputStream.Result.IsSkip
 
@@ -649,7 +662,7 @@ let mxMany1 direction p =
 /// alaways backtrack
 /// 
 /// Result<_, _>
-let mxManySkipRetain direction pSkip maxSkipCount p =
+let mxManySkipRetain direction pSkip maxSkipCount p = 
     let skip = 
         mxManyWithMaxCount direction (Some maxSkipCount) pSkip 
 
@@ -658,7 +671,7 @@ let mxManySkipRetain direction pSkip maxSkipCount p =
     let piped = 
         fun (inputstream: InputMatrixStream) ->
             //None
-            let outputStreams = pipe2 direction skip many1 id inputstream
+            let outputStreams = (pipe2 direction skip many1 id).Invoke inputstream
             match outputStreams with 
             | List.Some outputStreams ->
                 outputStreams
@@ -667,6 +680,7 @@ let mxManySkipRetain direction pSkip maxSkipCount p =
                     values.Length > 0
                 )
             | List.None -> []
+        |> MatrixParser
 
     ((mxMany direction piped))
     ||>> fun list ->
@@ -679,13 +693,14 @@ let mxManySkipRetain direction pSkip maxSkipCount p =
 /// Result<_, _>
 let mxMany1SkipRetain direction pSkip maxSkipCount p =
     let many1 = mxMany1 direction p
-    pipe2RelativelyWithTupleStreamsReturn direction (fun a -> many1 a) (fun _ -> mxManySkipRetain direction pSkip maxSkipCount p) (fun (a,b) ->
+    pipe2RelativelyWithTupleStreamsReturn direction many1 (fun _ -> mxManySkipRetain direction pSkip maxSkipCount p) (fun (a,b) ->
         List.map Result.Ok a @ b
     ) >> List.map (fun (stream1, stream2) ->
         if stream2.Result.IsSkip then 
             stream1 |> OutputMatrixStream.mapResultValue (List.map Result.Ok)
         else stream2
     )
+    |> MatrixParser
 
 
 let mxManySkip direction pSkip maxSkipCount p =
@@ -719,7 +734,9 @@ let inDirection (p: Direction -> MatrixParser<'result>) =
                         loop h
                     | _ -> failwith "compose shifts cannot be empty after start"
             loop inputStream.Shift
-        p direction inputStream
+        (p direction).Invoke inputStream
+    |> MatrixParser
+
 
 let mxUntil direction maxCount pPrevious (pLast: MatrixParser<'result>) =
     pipe2 direction (mxManyWithMaxCount direction maxCount (pPrevious <&!> pLast)) pLast id
@@ -767,8 +784,8 @@ type MergeStarterResult =
       Text: string }
 
 
-let mxMergeStarter inputStream = 
-    mxCellParser pMergeStarter (fun range -> { Address = range.Address; Text = range.Text}) inputStream
+let mxMergeStarter = 
+    mxCellParser pMergeStarter (fun range -> { Address = range.Address; Text = range.Text}) 
     
 
 let mxMerge direction =
@@ -879,7 +896,7 @@ let private runMatrixParserForRangesWithStreamsAsResult_Common logger (ranges : 
         )
 
     inputStreams 
-    |> List.collect p
+    |> List.collect p.Invoke
 
 
 let runMatrixParserForRangesWithStreamsAsResult (ranges : seq<SingletonExcelRangeBase>) (p : MatrixParser<_>) =
@@ -913,7 +930,7 @@ let runMatrixParser (worksheet: ValidExcelWorksheet) (p: MatrixParser<_>) =
     runMatrixParserForRanges userRange p
   
 
-let runMatrixParserWithStreamsAsResultSafe (worksheet: ValidExcelWorksheet) (p: MatrixParser<_>) =
+let runMatrixParserWithStreamsAsResultSafe (worksheet: ValidExcelWorksheet) (p: MatrixParser<'result>) =
     let userRange = 
         worksheet.Value
         |> ExcelWorksheet.getUserRangeList
@@ -923,13 +940,21 @@ let runMatrixParserWithStreamsAsResultSafe (worksheet: ValidExcelWorksheet) (p: 
     match runMatrixParserForRangesWithStreamsAsResult_Common logger userRange p with 
     | [] -> 
         match logger.Messages().IsEmpty with 
-        | true -> failwithf "All named parsed are parsed failured %A" p
+        | true -> failwithf "ParsingTarget: %s\nAll named parsed are parsed failured %A\nStackTrace:\n%s" (typeof<'result>.Name) p System.Environment.StackTrace 
         | false ->
-            failwithf "%A" (logger.Messages())
+            failwithf "ParsingTarget: %s\n%A\nStackTrace%s" (typeof<'result>.Name) (logger.Messages()) System.Environment.StackTrace 
     | outputStreams -> (AtLeastOneList.Create outputStreams)
 
+
+type MatrixParserSuccessfulResult<'result> = private MatrixParserSuccessfulResult of AtLeastOneList<'result>
+with 
+    member x.Value = 
+        let (MatrixParserSuccessfulResult v) = x
+        v
+
+    member x.AsList = x.Value.AsList
 
 let runMatrixParserSafe (worksheet: ValidExcelWorksheet) (p: MatrixParser<_>) =
     runMatrixParserWithStreamsAsResultSafe worksheet p
     |>AtLeastOneList.map (fun m -> m.Result.Value)
-
+    |> MatrixParserSuccessfulResult

@@ -49,13 +49,13 @@ let shiftTests =
 
 let matrixTests =
   testList "MatrixTests" [
-    testCase "mxText" <| fun _ -> 
+    ftestCase "mxText" <| fun _ -> 
         let parser =
-            (mxText "mxTextA")
+            (mxText "mxTextA2")
             |> MatrixParser.addLogger LoggerLevel.Important "mxTextA"
 
-        let results = runMatrixParser worksheet parser
-        match results with 
+        let results = runMatrixParserSafe worksheet parser
+        match results.AsList with 
         | ["mxTextA"] -> pass()
         | _ -> fail()
 
@@ -103,7 +103,7 @@ let matrixTests =
         let results = 
             runMatrixParser 
                 worksheet 
-                (c2 (mxText "C2_R2A") (r2 (fun a -> mxText "C2_R2B" a) (mxText "C2_R2C")))
+                (c2 (mxText "C2_R2A") (r2 (mxText "C2_R2B") (mxText "C2_R2C")))
 
         match results with 
         | [("C2_R2A"), ("C2_R2B", "C2_R2C")] -> pass()
@@ -140,7 +140,7 @@ let matrixTests =
                     (c3 
                         (mxText "Cross_1A") 
                         (r2 (mxText "Cross_1B") (c2 (mxText "Cross_1C") (mxText "Cross_1D")))
-                        (fun a -> mxText "Cross_1E" a)
+                        (mxText "Cross_1E")
                     )   
                 
         //pass()
@@ -158,8 +158,8 @@ let matrixTests =
                             (r2 (mxText "Cross_1B") (c2 (mxText "Cross_1C") (mxText "Cross_1D")))
                             (mxText "Cross_1E")
                         )
-                        (fun a -> mxText "Cross_1F" a)
-                        (fun a -> c2 (mxText "Cross_1G") (mxText "Cross_1H") a)
+                        (mxText "Cross_1F" )
+                        (c2 (mxText "Cross_1G") (mxText "Cross_1H"))
                     )
                 
         //pass()
@@ -215,9 +215,9 @@ let matrixTests =
                             (mxText "Cross_3B") 
                             (r2 
                                 (mxText "Cross_3C") 
-                                (fun a -> c2 (mxText "Cross_3D" ) (mxText "Cross_3E") a)
+                                (c2 (mxText "Cross_3D" ) (mxText "Cross_3E"))
                             )
-                            (fun a -> mxText "Cross_3F" a)
+                            (mxText "Cross_3F")
                         ))
 
         match results with
@@ -234,9 +234,9 @@ let matrixTests =
                             (mxText "Cross_3B") 
                             (r2 
                                 (mxText "Cross_3C") 
-                                (fun a -> c2 (mxText "Cross_3D" ) (mxText "Cross_3E") a)
+                                (c2 (mxText "Cross_3D" ) (mxText "Cross_3E"))
                             )
-                            (fun a -> mxText "Cross_3F" a)
+                            (mxText "Cross_3F")
                         )
                     )
 
@@ -265,12 +265,8 @@ let matrixTests =
                     header
                     (mxUntilA10 last)
 
-            let mxRowMany1Test x = 
-                fun inputStream ->
-                    mxRowMany1 x inputStream
-
             let parser3 =
-                mxRowMany1Test(
+                mxRowMany1(
                     c3
                         (mxTextf (fun m -> m.StartsWith "Cross_4"))
                         (mxTextf (fun m -> m.StartsWith "Cross_4"))
