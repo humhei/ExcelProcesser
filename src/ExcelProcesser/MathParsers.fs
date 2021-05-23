@@ -13,7 +13,7 @@ let mxFormulaAsInt32 formula =
         
 
 let mxSumContinuously direction =
-    mxUntil direction None (mxFParsec pint32) (mxFormulaAsInt32 Formula.SUM)
+    mxUntil1NoConfict direction None (mxFParsec pint32 <&!> mxFormula Formula.SUM) (mxUntilS5(mxFormulaAsInt32 Formula.SUM))
     |> MatrixParser.filterOutputStreamByResultValue (fun (numbers, sumNumber) ->
         (List.sum numbers = sumNumber) 
     )

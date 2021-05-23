@@ -17,6 +17,7 @@
     <PackageReference Include="EPPlus" Version="4.5.3.3" />
     <PackageReference Include="FParsec" Version="1.1.1" />
     <PackageReference Include="NLog" Version="4.7.7" />
+    <PackageReference Include="Shrimp.FSharp.Plus" Version="1.1.84" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
   </ItemGroup>
 </Project>

@@ -11,12 +11,14 @@ open System
 open System.IO
 open CellScript.Core
 open Shrimp.FSharp.Plus
+open System.Diagnostics
 
 type LoggerLevel = 
     | Info = 0
     | Important = 1
     | Slient = 2
 
+[<DebuggerDisplay("{Value.Address}")>]
 type SingletonExcelRangeBase = private SingletonExcelRangeBase of ExcelRangeBase
 with 
     static member Create (excelRangeBase: ExcelRangeBase) =
@@ -85,10 +87,10 @@ module Extensions =
     [<RequireQualifiedAccess>]
     module ExcelWorksheet =
 
-        let private getMaxColNumber (worksheet:ExcelWorksheet) =
+        let internal getMaxColNumber (worksheet:ExcelWorksheet) =
             worksheet.Dimension.End.Column
 
-        let private getMaxRowNumber (worksheet:ExcelWorksheet) =
+        let internal getMaxRowNumber (worksheet:ExcelWorksheet) =
             worksheet.Dimension.End.Row
 
         let getUserRangeList (worksheet: ExcelWorksheet) =

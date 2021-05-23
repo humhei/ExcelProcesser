@@ -49,9 +49,9 @@ let shiftTests =
 
 let matrixTests =
   testList "MatrixTests" [
-    ftestCase "mxText" <| fun _ -> 
+    testCase "mxText" <| fun _ -> 
         let parser =
-            (mxText "mxTextA2")
+            (mxText "mxTextA")
             |> MatrixParser.addLogger LoggerLevel.Important "mxTextA"
 
         let results = runMatrixParserSafe worksheet parser
@@ -337,6 +337,8 @@ let matrixTests =
         | _ -> fail()
 
 
+
+
     testCase "cross area1 reRange" <| fun _ -> 
         let results = 
             runMatrixParserWithStreamsAsResult
@@ -354,7 +356,7 @@ let matrixTests =
                     (mxText "Cross_1I")
                 )
         results 
-        |> List.map (OutputMatrixStream.reRange >> (fun range -> 
+        |> List.map (OutputMatrixStream.reRange >> (fun (range, _) -> 
             let ranges = ExcelRangeBase.asRangeList range
             List.map SingletonExcelRangeBase.getText ranges
             |> List.distinct
@@ -376,7 +378,7 @@ let matrixTests =
                     )
                 )
         results 
-        |> List.map (OutputMatrixStream.reRange  >> (fun range -> 
+        |> List.map (OutputMatrixStream.reRange  >> (fun (range, _) -> 
             let ranges = List.ofSeq range
             List.map ExcelRangeBase.getText ranges
             |> List.distinct
@@ -395,10 +397,12 @@ let matrixTests =
 
     testCase "mxMerge horizontal" <| fun _ -> 
         let results = 
-            runMatrixParser worksheet ((mxMerge Direction.Horizontal) ||>> fun (mergeStarter ,_) -> mergeStarter.Text)
+            runMatrixParser worksheet ((mxMergeWithAddresses Direction.Horizontal) ||>> fun (mergeStarter,_) -> mergeStarter.Text)
         match results with 
         | ["Merge1"; "Merge2"] -> pass()
         | _ -> fail()
+        
+
 
   ]
 
