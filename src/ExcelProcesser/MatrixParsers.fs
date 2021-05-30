@@ -133,7 +133,7 @@ module Shift =
                     failwithf "not implemented preCalculatedCoordinate %A direction %A shifts %A" preCalculatedCoordinate direction shifts
             | _ -> failwith "Invalid token"
         else
-            failwith ""
+            failwith "Not implemented"
 
     let rec applyDirection (preShift: Shift) (direction: Direction) shift: Shift =
         match preShift, shift with 
@@ -233,12 +233,28 @@ module internal SingletonExcelRangeBase =
         |> ExcelRangeBase.offset shift
         |> SingletonExcelRangeBase.Create
 
+[<DebuggerDisplay("{ExcelAddress}")>]
 type ParsingAddress =
     { StartRow: int 
       EndRow: int
       StartColumn: int 
       EndColumn: int 
       }
+with 
+    static member OfRange(range: ExcelRangeBase) =
+        let startCell = range.Start
+
+        let endCell = range.End
+        {
+            StartRow = startCell.Row
+            EndRow = endCell.Row
+            StartColumn = startCell.Column
+            EndColumn = endCell.Column
+        }
+
+    member x.ExcelAddress =
+        ExcelAddress(x.StartRow, x.StartColumn, x.EndRow, x.EndColumn)
+
 
 [<DebuggerDisplay("{Range.Value.Address}")>]
 type InputMatrixStream = 
@@ -247,6 +263,10 @@ type InputMatrixStream =
       ParsingAddress: ParsingAddress
       Logger: Logger }
 with 
+    member internal stream.OffsetedRange =
+        SingletonExcelRangeBase.offset stream.Shift stream.Range
+    
+
     member private x.LastCellShift = x.Shift.Last
 
     member private x.FoldedShift = x.Shift.Folded
@@ -263,6 +283,9 @@ type OutputMatrixStream<'result> =
       Result: OutputMatrixStreamResult<'result> }
 
 with 
+    member internal stream.OffsetedRange =
+        SingletonExcelRangeBase.offset stream.Shift stream.Range
+    
     member x.AsInputStream =
         { Range = x.Range 
           Shift = x.Shift
@@ -273,10 +296,89 @@ with
 
     member private x.FoldedShift = x.Shift.Folded
 
+    member x.ShiftHorizontally(columns: int) =
+        { x with 
+            Shift = 
+                (x.Shift, [1..columns])
+                ||> List.fold(fun shift _ ->
+                    Shift.applyDirection shift Direction.Horizontal shift
+                )
+            }
+
+    member x.ShiftVertically(rows: int) =
+        { x with 
+            Shift = 
+                (x.Shift, [1..rows])
+                ||> List.fold(fun shift _ ->
+                    Shift.applyDirection shift Direction.Vertical shift
+                )
+            }
+
+    member x.ShiftBy(columns, rows: int) =
+        x.ShiftHorizontally(columns).ShiftVertically(rows)
+
+
+type ColumnRerangedResult(range: ExcelRangeBase, logger: Logger) =
+    let inputStreamOfReranged logger (reranged: ExcelRangeBase) =
+        let newAddr: ParsingAddress =
+            ParsingAddress.OfRange reranged
+
+        let range = 
+            reranged.Offset(0, 0, 1, 1)
+            |> SingletonExcelRangeBase.Create
+
+        let resetedInputStream = 
+            { Range = range
+              Shift = Shift.Start
+              ParsingAddress = newAddr
+              Logger = logger }
+
+        resetedInputStream
+
+    
+    member x.Range = range
+
+    member val InputMatrixStream = inputStreamOfReranged logger range
+
+    member x.SetRowCountTo(rowsCount) =
+        let newRange =
+            range.Offset(0, 0, rowsCount, range.Columns)
+        ColumnRerangedResult(
+            range = newRange,
+            logger = logger
+        )
+        
+
+    member x.SetColumnTo(columnsCount) =
+        let newRange = 
+            range.Offset(0, 0, range.Rows, columnsCount)
+        
+        ColumnRerangedResult(
+            range = newRange,
+            logger = logger
+        )
+
+    member x.RightOf(targetRange: SingletonExcelRangeBase) =
+        let addr = 
+            ExcelAddress(
+                fromCol = targetRange.Column + 1,
+                toColumn = x.Range.End.Column,
+                fromRow = x.Range.Start.Row,
+                toRow = x.Range.End.Row
+            )
+
+        let newRange = x.Range.Worksheet.Cells.[addr.Address]
+        
+        ColumnRerangedResult(
+            range = newRange,
+            logger = logger
+        )
+
 [<RequireQualifiedAccess>]
 module OutputMatrixStream =
 
-    let reRange (stream: OutputMatrixStream<_>) = 
+
+    let reRangeByShift (stream: OutputMatrixStream<_>) = 
         let verticals = 
             let rec loop shift =
                 match shift with 
@@ -288,7 +390,9 @@ module OutputMatrixStream =
         let maxVertical = 
             verticals 
             |> List.map (fun (coordinate, i) -> coordinate.Y + i)
-            |> List.max
+            |> function
+                | [] -> 0
+                | verticals -> List.max verticals
 
         let horizontals = 
             let rec loop shift =
@@ -301,24 +405,68 @@ module OutputMatrixStream =
         let maxHorizontal = 
             horizontals 
             |> List.map (fun (coordinate, i) -> coordinate.X + i)
-            |> List.max
+            |> function
+                | [] -> 0
+                | horizontals -> List.max horizontals
 
-        let newRange = 
-
+        let reranged = 
             stream.Range.Offset(0, 0, maxVertical + 1, maxHorizontal + 1)
 
-        let newAddr: ParsingAddress =
-            let startAddr = newRange.Start
-            let endAddr = newRange.End
-                
-            {
-                StartRow = startAddr.Row
-                EndRow = endAddr.Row
-                StartColumn = startAddr.Column
-                EndColumn = endAddr.Column
-            }
+        ColumnRerangedResult(reranged, stream.Logger)
 
-        newRange, newAddr
+
+    let reRangeToEnd (stream: OutputMatrixStream<_>) = 
+        let addr = stream.Range.Value.Address + ":" + stream.ParsingAddress.ExcelAddress.End.Address
+        let reranged = stream.Range.Value.Worksheet.Cells.[addr]
+        ColumnRerangedResult(reranged, stream.Logger)
+
+    let reRangeTo (targetRange: SingletonExcelRangeBase) (stream: OutputMatrixStream<_>) = 
+        let addr = stream.Range.Value.Address + ":" + targetRange.Address
+        let reranged = stream.Range.Value.Worksheet.Cells.[addr]
+        ColumnRerangedResult(reranged, stream.Logger)
+
+    let topArea (stream: OutputMatrixStream<_>) =   
+        match stream.ParsingAddress.StartRow < stream.Range.Row with 
+        | true -> 
+            let addr = 
+                ExcelAddress(
+                    fromCol = stream.Range.Column,
+                    toColumn = stream.OffsetedRange.Column,
+                    fromRow = stream.ParsingAddress.StartRow,
+                    toRow = stream.Range.Row - 1)
+
+            let reranged = stream.Range.Value.Worksheet.Cells.[addr.Address]
+            (reranged)
+            |> Some
+
+        | false -> None
+
+    let leftArea (stream: OutputMatrixStream<_>) =
+        match stream.ParsingAddress.StartColumn < stream.Range.Column with 
+        | true ->
+
+            let addr = 
+                ExcelAddress(
+                    fromCol = stream.ParsingAddress.StartColumn,
+                    toColumn = stream.Range.Column - 1,
+                    fromRow = stream.Range.Row,
+                    toRow = stream.OffsetedRange.Row )
+
+            let reranged = stream.Range.Value.Worksheet.Cells.[addr.Address]
+            (reranged)
+            |> Some
+
+        | false -> None
+
+    let reRangeRowTo rowsCount (stream: OutputMatrixStream<_>) = 
+        let column = stream.ParsingAddress.EndColumn - stream.Range.Value.Start.Column + 1
+        let reranged = stream.Range.Value.Offset(0, 0, rowsCount, column)
+        ColumnRerangedResult(reranged, stream.Logger)
+
+    let reRangeColumnTo columnsCount (stream: OutputMatrixStream<_>) = 
+        let row = stream.ParsingAddress.EndRow - stream.Range.Value.Start.Row + 1
+        let reranged = stream.Range.Value.Offset(0, 0, row, columnsCount)
+        ColumnRerangedResult(reranged, stream.Logger)
 
     let applyDirectionToShift direction (preInputstream: InputMatrixStream) (stream: OutputMatrixStream<_>) =
         if stream.Result.IsSkip then stream
@@ -344,6 +492,33 @@ module OutputMatrixStream =
           ParsingAddress = stream.ParsingAddress
           Logger = stream.Logger }
 
+    let removeRedundants (streams: OutputMatrixStream<'result> list) =
+        let streamWithAddressList =
+            streams
+            |> List.map (fun stream ->
+                ExcelAddress(stream.Range.RangeTo(stream.OffsetedRange).Address), stream
+            )
+
+        let length = streamWithAddressList.Length
+
+        let rec loop i (streamWithAddressList: list<ExcelAddress * OutputMatrixStream<'result>>) =
+            match i >= length with 
+            | true -> streamWithAddressList
+            | false ->
+                match streamWithAddressList with 
+                | ((headAddr, _) & h) :: t ->
+                    let redundants, filtered =
+                        t |> List.partition (fun (otherAddr, _) ->
+                            otherAddr.IsIncludedIn headAddr
+                        )
+
+                    loop (i + redundants.Length + 1) (filtered @ [h])
+
+                | [] -> []
+
+        loop 0 streamWithAddressList
+        |> List.map snd
+
 
 [<RequireQualifiedAccess>]
 type MatrixStream<'result> =
@@ -354,6 +529,9 @@ type MatrixStream<'result> =
 
 type MatrixParser<'result>(invoke: InputMatrixStream -> OutputMatrixStream<'result> list) =
     member x.Invoke = invoke
+
+    member x.InvokeToResults = 
+        x.Invoke >> List.map (fun outputStream -> outputStream.Result.Value)
 
     member x.Map(mapping) = 
         mapping invoke
@@ -375,11 +553,22 @@ module MatrixParser =
             let (outputStreams: OutputMatrixStream<'result> list) = p inputStream
             List.map f outputStreams
 
+
+    let mapOutputStreams f p = map p <| fun p ->
+        fun (inputStream: InputMatrixStream) ->
+            let (outputStreams: OutputMatrixStream<'result> list) = p inputStream
+            f outputStreams
+
+
     let collectOutputStream f p : MatrixParser<_> = map p <| fun p ->
         fun (inputStream: InputMatrixStream) ->
             let (outputStreams: OutputMatrixStream<'result> list) = p inputStream
-            let a = List.collect f outputStreams
-            a
+            List.collect f outputStreams
+
+    let pickOutputStream f p : MatrixParser<_> = map p <| fun p ->
+        fun (inputStream: InputMatrixStream) ->
+            let (outputStreams: OutputMatrixStream<'result> list) = p inputStream
+            List.choose f outputStreams
 
 
     let filterOutputStreamByResultValue f p = map p <| fun p ->
@@ -390,7 +579,7 @@ module MatrixParser =
 
 let mxCellParserOp (cellParser: SingletonExcelRangeBase -> 'result option) =
     fun (stream: InputMatrixStream) ->
-        let offsetedRange = SingletonExcelRangeBase.offset stream.Shift stream.Range
+        let offsetedRange = stream.OffsetedRange
         let addr = offsetedRange.Value.Start
         let streamAddr = stream.ParsingAddress
         match addr.Row, addr.Column with 
@@ -439,7 +628,7 @@ let mxTextf f =
     mxCellParser (pTextf f) ExcelRangeBase.getText
 
 let mxNonEmpty = 
-    mxTextf(fun text -> text.Trim() <> "")
+    mxTextf isTrimmedTextNotEmpty
 
 let mxTextOp picker =
     mxCellParserOp (fun range ->
@@ -466,6 +655,18 @@ let mxAnySkip =
 let mxAnyOrigin = 
     mxCellParser pAny ExcelRangeBase.getText 
 
+let mxAddress address = 
+    let targetAddress = new ExcelAddress(address)
+    mxCellParserOp(fun range ->
+        if ExcelAddress(range.Value.Address).Address = targetAddress.Address
+        then Some range.Value.Text
+        else None
+    )
+
+let mxAnyOriginObj = 
+    mxCellParser pAny ExcelRangeBase.getValue 
+
+
 let (||>>) p f = 
     MatrixParser.mapOutputStream (fun outputStream -> OutputMatrixStream.mapResultValue f outputStream) p
 
@@ -485,8 +686,8 @@ module LoggerExtensions =
 
                 for outputStream in outputStreams do
                     let message =   
-                        let range = ExcelRangeBase.offset outputStream.Shift outputStream.Range.Value
-                        let addr = range
+                        let range = outputStream.OffsetedRange
+                        let addr = range.Value.Address
                         sprintf $"{name}\tResult: {addr}: {outputStream.Result.Value}"
 
                     logger.Log loggerLevel message
@@ -594,6 +795,7 @@ let private pipe2Relatively (direction: Direction) (p1: MatrixParser<'result1>) 
     |> MatrixParser
     
 
+
 let pipe2 direction p1 p2 f = 
     pipe2Relatively direction p1 (fun _ -> p2) f
 
@@ -633,6 +835,7 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
                     match p inputStream with 
                     | List.Some outputStreams ->
                         let skip, outputStreams = List.partition isSkip outputStreams 
+
                         yield! List.replicate skip.Length []
 
                         yield! loop (MatrixStream.Output (inputStream,outputStreams)) (accum @ outputStreams) 
@@ -642,6 +845,7 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
                 | MatrixStream.Output (preInputStream,outputStreams1) ->
                     match outputStreams1 with 
                     | List.Some outputStreams1 ->
+
                         yield!
                             outputStreams1
                             |> List.collect (fun outputStream1 -> [
@@ -850,6 +1054,13 @@ let mxInt32 = mxTextOp(fun text ->
     | false, _ -> None
 )
 
+let mxDouble = mxTextOp(fun text ->
+    match Double.TryParse text with 
+    | true, v -> Some v
+    | false, _ -> None
+)
+
+
 type MergeStarterResult =
     { Address: string 
       Text: string }
@@ -872,16 +1083,23 @@ let mxMerge direction =
         start.Text
     )
 
+let mxColMany p = mxMany Direction.Horizontal p
+
 let mxColMany1 p = mxMany1 Direction.Horizontal p
+let mxColMany1WithMaxCount maxCount p = mxMany1WithMaxCount Direction.Horizontal maxCount p
+
+
 
 let mxColManySkip pSkip maxSkipCount p = mxManySkip Direction.Horizontal pSkip maxSkipCount p
 
 let mxRowManySkip pSkip maxSkipCount p = mxManySkip Direction.Vertical pSkip maxSkipCount p
 
 let mxRowMany1 p = mxMany1 Direction.Vertical p
+let mxRowMany1WithMaxCount maxCount p = mxMany1WithMaxCount Direction.Vertical maxCount p
 
 let c2 p1 p2 =
     pipe2 Direction.Horizontal p1 p2 id
+
 
 /// R = Relatively
 let c2R p1 buildP2 = 
@@ -968,8 +1186,6 @@ let private runMatrixParserForRangesWithStreamsAsResult_Common addr logger (rang
         |> List.ofSeq
 
 
-
-
     let inputStreams = 
         ranges 
         |> List.map (fun range ->
@@ -979,7 +1195,6 @@ let private runMatrixParserForRangesWithStreamsAsResult_Common addr logger (rang
               ParsingAddress = addr
               }
         )
-
 
     inputStreams 
     |> List.collect p.Invoke
@@ -994,22 +1209,37 @@ let private runMatrixParserForRanges addr (ranges : seq<SingletonExcelRangeBase>
     mses |> List.map (fun ms -> ms.Result.Value)
 
 
-let runMatrixParserForRange (range : ExcelRangeBase) (p : MatrixParser<_>) =
+let runMatrixParserForRangeWithStreamsAsResult (range : ExcelRangeBase) (p : MatrixParser<_>) =
     let address = 
-        let startCell = range.Start
-
-        let endCell = range.End
-        {
-            StartRow = startCell.Row
-            EndRow = endCell.Row
-            StartColumn = startCell.Column
-            EndColumn = endCell.Column
-        }
+        ParsingAddress.OfRange range
 
     let ranges = 
         ExcelRangeBase.asRangeList range
     let mses = runMatrixParserForRangesWithStreamsAsResult address ranges p
-    mses |> List.map (fun ms -> ms.Result.Value)
+    mses
+
+let runMatrixParserForRangeWithStreamsAsResult2 (logger: Logger) (range : ExcelRangeBase) (p : MatrixParser<_>) =
+    let address = 
+        ParsingAddress.OfRange range
+
+    let ranges = 
+        ExcelRangeBase.asRangeList range
+
+    runMatrixParserForRangesWithStreamsAsResult_Common address logger ranges p
+
+let runMatrixParserForRange2 logger (range : ExcelRangeBase) (p : MatrixParser<_>) =
+    runMatrixParserForRangeWithStreamsAsResult2 logger range p
+    |> List.map (fun m -> m.Result.Value)
+
+
+let runMatrixParserForRange (range : ExcelRangeBase) (p : MatrixParser<_>) =
+    runMatrixParserForRangeWithStreamsAsResult range p
+    |> List.map (fun m -> m.Result.Value)
+
+let runMatrixParserForRangeWithoutRedundent (range : ExcelRangeBase) (p : MatrixParser<_>) =
+    runMatrixParserForRangeWithStreamsAsResult range p
+    |> OutputMatrixStream.removeRedundants
+    |> List.map (fun m -> m.Result.Value)
 
 let runMatrixParserWithStreamsAsResult (worksheet: ValidExcelWorksheet) (p: MatrixParser<_>) =
     let userRange = 
@@ -1030,7 +1260,7 @@ let runMatrixParserWithStreamsAsResult (worksheet: ValidExcelWorksheet) (p: Matr
 let runMatrixParser (worksheet: ValidExcelWorksheet) (p: MatrixParser<_>) =
     runMatrixParserWithStreamsAsResult worksheet p
     |> List.map (fun m -> m.Result.Value)
-  
+
 
 let runMatrixParserWithStreamsAsResultSafe (worksheet: ValidExcelWorksheet) (p: MatrixParser<'result>) =
 

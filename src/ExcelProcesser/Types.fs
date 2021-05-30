@@ -3,20 +3,17 @@
 namespace ExcelProcesser
 #nowarn "0104"
 open FParsec
-open System.Drawing
-open OfficeOpenXml
-open System.Text.RegularExpressions
-open OfficeOpenXml.Style
-open System
-open System.IO
 open System.Collections.Generic
 open NLog
+open OfficeOpenXml
 
 type Formula =
     | SUM = 0
 
 [<AutoOpen>]
 module Operators =
+    let internal isTrimmedTextEmpty (text: string) = text.Trim() = ""
+    let internal isTrimmedTextNotEmpty (text: string) = text.Trim() <> ""
 
 
     let nlog = NLog.LogManager.GetCurrentClassLogger()

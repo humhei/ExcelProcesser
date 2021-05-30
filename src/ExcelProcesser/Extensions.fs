@@ -2,14 +2,8 @@
 
 namespace ExcelProcesser
 
-open FParsec
-open System.Drawing
 open OfficeOpenXml
-open System.Text.RegularExpressions
 open OfficeOpenXml.Style
-open System
-open System.IO
-open CellScript.Core
 open Shrimp.FSharp.Plus
 open System.Diagnostics
 
@@ -17,6 +11,9 @@ type LoggerLevel =
     | Info = 0
     | Important = 1
     | Slient = 2
+
+
+
 
 [<DebuggerDisplay("{Value.Address}")>]
 type SingletonExcelRangeBase = private SingletonExcelRangeBase of ExcelRangeBase
@@ -32,6 +29,24 @@ with
         value
 
     member x.Offset(rowOffset, columnOffset, numberOfRows, numberOfColumns) = x.Value.Offset(rowOffset, columnOffset, numberOfRows, numberOfColumns)
+    
+    member x.Offset(rowOffset, columnOffset) = 
+        x.Value.Offset(rowOffset, columnOffset)
+        |> SingletonExcelRangeBase.Create
+
+    member x.Address = x.Value.Address
+
+    member x.Text = x.Value.Text
+
+    member x.Row = x.Value.Start.Row
+
+    member x.Column = x.Value.Start.Column
+
+    member x.RangeTo(targetRange: SingletonExcelRangeBase) =
+        let addr = x.Value.Address + ":" + targetRange.Address
+        x.Value.Worksheet.Cells.[addr]
+
+
 
 [<RequireQualifiedAccess>]
 module SingletonExcelRangeBase =
@@ -41,9 +56,37 @@ module SingletonExcelRangeBase =
     let getText (range: SingletonExcelRangeBase) = 
         range.Value.Text
 
+    let tryGetMergedRange(range: SingletonExcelRangeBase) =
+        let range = range.Value
+        let worksheet = range.Worksheet
+        match range.Merge with 
+        | true ->
+            let id = worksheet.GetMergeCellId (range.Start.Row, range.Start.Column)
+
+            let addr = 
+                worksheet.MergedCells.[id-1]
+                |> ExcelAddress
+                |> Some
+
+            addr
+
+        | false -> None
+
 [<AutoOpen>]
 module AutoOpen_Extensions =
     
+
+    type ExcelAddress with 
+        member x.Contains(y: ExcelAddress) = 
+
+
+            match x.Start.Column, x.Start.Row, x.End.Column, x.End.Row with 
+            | SmallerOrEqual y.Start.Column, SmallerOrEqual y.Start.Row, BiggerOrEqual y.End.Column, BiggerOrEqual y.End.Row ->
+                true
+            | _ -> false
+
+        member x.IsIncludedIn(y: ExcelAddress) = y.Contains(x)
+
     [<RequireQualifiedAccess>]
     module String =
         let contains pattern (text: string) =
@@ -101,8 +144,11 @@ module Extensions =
                       let content = worksheet.Cells.[i, j]
                       yield SingletonExcelRangeBase.Create(content :> ExcelRangeBase) ]
 
+
         let getMergeCellIdOfRange (range: ExcelRangeBase) (worksheet: ExcelWorksheet) =
             worksheet.GetMergeCellId (range.Start.Row, range.Start.Column)
+
+
 
     [<RequireQualifiedAccess>]
     module ExcelRangeBase =
@@ -113,6 +159,7 @@ module Extensions =
             |> List.map SingletonExcelRangeBase.Create
 
         let getText (range: ExcelRangeBase) = range.Text
+        let getValue (range: ExcelRangeBase) = range.Value
 
         let getAddress (range: ExcelRangeBase) = range.Address
 

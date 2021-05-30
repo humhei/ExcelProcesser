@@ -299,6 +299,19 @@ let matrixTests =
         | ["cm_n1"; "cm_n2"; "cm_n3"; "cm_n4"] :: _  -> pass()
         | _ -> fail()
 
+    testCase "column many without redundant" <| fun _ -> 
+        let results = 
+            runMatrixParserWithStreamsAsResult 
+                worksheet 
+                (mxColMany1 (mxTextf(fun text -> text.StartsWith "cm_n")))
+
+            |> OutputMatrixStream.removeRedundants
+            |> List.map (fun m -> m.Result.Value)
+
+        match results with 
+        | [["cm_n1"; "cm_n2"; "cm_n3"; "cm_n4"]]  -> pass()
+        | _ -> fail()
+
     testCase "row many" <| fun _ -> 
         let results = 
             runMatrixParser 
@@ -327,13 +340,18 @@ let matrixTests =
         | _ -> fail()
 
     testCase "mx until" <| fun _ -> 
-        let results = 
-            runMatrixParser 
+        let streams = 
+            runMatrixParserWithStreamsAsResult 
                 worksheet 
-                (c2 (mxText "mx_until1") (mxUntilA50 (mxText "mx_until4")))
+                    (c2 (c2 (mxText "mx_until1") (mxUntilA50 (mxText "mx_until4"))) (mxText "mx_util5"))
+
+
+        let results = 
+            streams
+            |> List.map (fun m -> m.Result.Value)
 
         match results with 
-        | ("mx_until1", ("mx_until4")) :: _  -> pass()
+        | (("mx_until1", ("mx_until4")), "mx_util5") :: _  -> pass()
         | _ -> fail()
 
 
@@ -356,8 +374,8 @@ let matrixTests =
                     (mxText "Cross_1I")
                 )
         results 
-        |> List.map (OutputMatrixStream.reRange >> (fun (range, _) -> 
-            let ranges = ExcelRangeBase.asRangeList range
+        |> List.map (OutputMatrixStream.reRangeByShift >> (fun (rerangedResult) -> 
+            let ranges = ExcelRangeBase.asRangeList rerangedResult.Range
             List.map SingletonExcelRangeBase.getText ranges
             |> List.distinct
         ))
@@ -378,8 +396,8 @@ let matrixTests =
                     )
                 )
         results 
-        |> List.map (OutputMatrixStream.reRange  >> (fun (range, _) -> 
-            let ranges = List.ofSeq range
+        |> List.map (OutputMatrixStream.reRangeByShift  >> (fun (rerangedResult) -> 
+            let ranges = List.ofSeq rerangedResult.Range
             List.map ExcelRangeBase.getText ranges
             |> List.distinct
         ))

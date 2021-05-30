@@ -7,6 +7,7 @@ open ExcelProcesser.MathParsers
 open Extensions
 open Deedle
 open Shrimp.FSharp.Plus
+open OfficeOpenXml
 
 [<AutoOpen>]
 module internal InternalExtensions =
@@ -142,14 +143,13 @@ module TwoHeadersPivotTable =
     
         let pElement = 
             MatrixParser.addLogger LoggerLevel.Info "pElement" pElement
-    
 
         (r2R 
             (mxGroupingColumnsHeader defaultGroupedHeaderText pChildHeader)
             (fun outputStream ->
 
                 let maxColNum, columns = 
-                    let reranged, addr = OutputMatrixStream.reRange outputStream
+                    let reranged = (OutputMatrixStream.reRangeByShift outputStream).Range
                     reranged.End.Column, reranged.Columns
 
                 let pElementInRange =
@@ -395,24 +395,16 @@ module TwoHeadersPivotTable =
 
             mxTwoHeadersPivotTableBorder pLeftBorderHeader pNumberHeader pRightBorderHeader
             |> MatrixParser.collectOutputStream (fun outputStream ->
-                let reranged, addr = OutputMatrixStream.reRange outputStream
-                let range = 
-                    reranged
-                    |> Seq.head
-                    |> SingletonExcelRangeBase.Create
-
-                let resetedInputStream = 
-                    { Range = range
-                      Shift = Shift.Start
-                      ParsingAddress = addr
-                      Logger = outputStream.Logger }
+                let reranged, resetedInputStream = 
+                    let reranged = OutputMatrixStream.reRangeByShift outputStream
+                    reranged.Range, reranged.InputMatrixStream
 
                 let p = 
                     let p =
                         match pOriginRightBorderHeader with 
                         | Some _ ->
                             c3 
-                                (inDebug(pLeftBorderHeader <&> mxMergeStarter) ||>> ignore)
+                                (pLeftBorderHeader <&> mxMergeStarter ||>> ignore)
                                 ((mxUntilA50
                                     ((mxGroupingColumn pGroupingColumn))))
                                 ((mxUntilA50 (pRightBorderHeader <&> mxMergeStarter)) ||>> ignore)
@@ -454,5 +446,361 @@ module TwoHeadersPivotTable =
             )
 
 
+module PivotTable =
+
+    [<RequireQualifiedAccess>]
+    type GroupingColumnHeaderRowName =
+        | Left of string
+        | Top of string
+    with 
+        member x.Value =
+            match x with 
+            | GroupingColumnHeaderRowName.Left v -> v
+            | GroupingColumnHeaderRowName.Top v -> v
+
+    [<RequireQualifiedAccess>]
+    type GroupingColumnHeaderRowNameParser =
+        | Left of MatrixParser<string>
+        | TopOrNone
+
+    type GroupingColumnHeaderRow<'groupingHeader> =
+        { Name: GroupingColumnHeaderRowName option
+          Values: 'groupingHeader al1List }
+    with 
+        static member Parser(groupingHeaders: MatrixParser<'groupingHeader list>, headerName: GroupingColumnHeaderRowNameParser, rowsCount) =
+            
+            match headerName with 
+            | GroupingColumnHeaderRowNameParser.TopOrNone ->
+                mxRowMany1WithMaxCount (Some rowsCount) groupingHeaders
+                |> MatrixParser.mapOutputStreams OutputMatrixStream.removeRedundants
+                |> MatrixParser.mapOutputStream (fun outputStream ->
+                    outputStream
+                    |> OutputMatrixStream.mapResultValue(fun groupingHeaderLists ->
+                        match groupingHeaderLists with 
+                        | [] -> []
+                        | [ groupingHeaders ] ->
+                            let nameCellOfArea area =
+                                let exactlyOneAreaText =
+                                    ExcelRangeBase.asRangeList area
+                                    |> List.filter(fun m -> m.Text.Trim() <> "")
+                                    |> List.tryExactlyOne
+
+                                exactlyOneAreaText
+
+                            let topNameCell = 
+                                OutputMatrixStream.topArea outputStream
+                                |> Option.map nameCellOfArea
+                                |> Option.flatten
+
+                            { Name = 
+                                topNameCell
+                                |> Option.map (fun m -> GroupingColumnHeaderRowName.Top m.Text )
+                              Values = AtLeastOneList.Create groupingHeaders }
+                            |> List.singleton
+
+                        | groupingHeaderLists -> 
+                            groupingHeaderLists
+                            |> List.map  (fun groupingHeaders ->
+                                { Name = None
+                                  Values = AtLeastOneList.Create groupingHeaders }
+                            )
+                    )
+                )
+
+            | GroupingColumnHeaderRowNameParser.Left leftName ->
+                (
+                    mxRowMany1 (c2 leftName groupingHeaders)
+                    |> MatrixParser.mapOutputStreams OutputMatrixStream.removeRedundants
+                    |> MatrixParser.mapOutputStream (
+                        OutputMatrixStream.mapResultValue (List.map (fun (leftName, groupingHeaders) ->
+                        { Name = Some (GroupingColumnHeaderRowName.Left leftName)
+                          Values = AtLeastOneList.Create groupingHeaders }
+                        ))
+                    )
+                )
+            |> fun a -> a ||>> AtLeastOneList.Create
+
+    type GroupingColumn<'groupingHeader, 'groupingElement> =
+        { 
+            HeaderRows: GroupingColumnHeaderRow<'groupingHeader> al1List
+            Elements: 'groupingElement al1List al1List
+        }
+
+    
+    type GroupingColumnParser<'groupingHeader, 'groupingElement>(groupingHeaderRows: MatrixParser<GroupingColumnHeaderRow<'groupingHeader> al1List>, groupingElements: MatrixParser<'groupingElement list>) =
+        member x.GroupingHeaders = groupingHeaderRows
+        member x.Value: MatrixParser<GroupingColumn<'groupingHeader, 'groupingElement>> =
+            r2
+                groupingHeaderRows
+                ((mxRowMany1 groupingElements))
+            ||>> (fun (headerRows, elementLists) ->
+                let length = headerRows.Head.Values.Length
+                { HeaderRows = headerRows
+                  Elements = 
+                    elementLists
+                    |> List.map (fun elements ->
+                        List.take length elements
+                    )
+                    |> AtLeastOneList.ofLists
+                }
+            )
+    
+    [<RequireQualifiedAccess>]
+    type private LiteralMergeCell =
+        | MergedRange of ExcelRangeBase
+        | EmptyMerged of SingletonExcelRangeBase * columns: int * rows: int
+    with 
+        member x.Rows =
+            match x with 
+            | LiteralMergeCell.MergedRange excelRange -> excelRange.Rows
+            | LiteralMergeCell.EmptyMerged (range, columns, rows) -> rows
+
+        member x.Columns =
+            match x with 
+            | LiteralMergeCell.MergedRange excelRange -> excelRange.Columns
+            | LiteralMergeCell.EmptyMerged (range, columns, rows) -> columns
+
+
+
+    [<RequireQualifiedAccess>]
+    type NormalColumnTreeHeader =
+        | Node of name: string * subTrees: NormalColumnTreeHeader al1List
+        | Leaf of string
+
+        static member Parser(parser: MatrixParser<_>, rowsCount) =
+            parser
+            |> MatrixParser.collectOutputStream(fun outputStream ->
+                let firstCell = outputStream.OffsetedRange
+
+                let firstColumn_lastContentedCell =
+                    firstCell.Offset(0, 0, rowsCount, 1)
+                    |> ExcelRangeBase.asRangeList
+                    |> List.tryFindBack(fun cell ->
+                        cell.Text.Trim() <> "" 
+                    )
+
+                match firstColumn_lastContentedCell with 
+                | None -> 
+                    outputStream.ShiftVertically(rowsCount - 1)
+                    |> OutputMatrixStream.mapResultValue (NormalColumnTreeHeader.Leaf)
+                    |> List.singleton
+
+                | Some firstColumn_lastContentedCell ->
+                    
+                    let width =
+                        let lastContentedRow = 
+                            let rec loop accum (firstRowCell: SingletonExcelRangeBase) (lastRowCell: SingletonExcelRangeBase) =
+                                if lastRowCell.Text.Trim() = "" || (firstRowCell.Address <> firstCell.Address && firstRowCell.Text <> "")
+                                then accum
+                                else loop (lastRowCell :: accum) (firstRowCell.Offset(0, 1)) (lastRowCell.Offset(0, 1))
+
+                            loop [] firstCell firstColumn_lastContentedCell
+                            |> List.rev
+
+                        lastContentedRow.Length
+
+                    let createNormalColumnTreeHeader (range: SingletonExcelRangeBase) leafs =
+                        match leafs with
+                        | [] ->  NormalColumnTreeHeader.Leaf range.Text
+                        | leafs -> NormalColumnTreeHeader.Node(range.Text, AtLeastOneList.Create leafs)
+                    
+
+                    let rec loop width (range: SingletonExcelRangeBase) = 
+                        let newWidth = 
+                            let rec loop accum (range: SingletonExcelRangeBase) = 
+                                let nextRange = range.Offset(0, 1)
+                                if accum = width || nextRange.Text.Trim() <> ""
+                                then accum
+                                elif accum < width
+                                then
+                                    loop (accum + 1) nextRange
+                                else failwith "Invalid token"
+
+                            loop 1 range
+
+                        let distance = width - newWidth
+
+                        match range.Row = firstColumn_lastContentedCell.Row with 
+                        | true -> 
+                            let leafs = 
+                                [
+                                    for range in range.Offset(0, 0, 1, width) do
+                                        yield NormalColumnTreeHeader.Leaf range.Text
+                                ]
+                            
+                            leafs
+
+                        | _ ->
+
+                            match distance with 
+                            | i when i = 0 -> 
+                                match range.Text.Trim() = "" && range.Address <> firstCell.Address with 
+                                | true -> loop width (range.Offset(1, 0)) 
+                                | false ->
+                                    [createNormalColumnTreeHeader range (loop width (range.Offset(1, 0)))] 
+
+                            | i when i > 1 ->
+                                let newRange = range.Offset(0, newWidth)
+                                createNormalColumnTreeHeader range (loop newWidth (range.Offset(1, 0))) 
+                                :: loop (i) newRange
+
+                            | _ -> failwith "Invalid token"
+
+                    let normalColumnHeaders = 
+                        (loop width firstCell) 
+                        |> List.exactlyOne
+
+                    let newOutputStream =
+                         outputStream.ShiftBy(width-1, rowsCount-1)
+                         |> OutputMatrixStream.mapResultValue (fun _ -> normalColumnHeaders)
+
+                    [ newOutputStream ]
+     
+
+                
+            )
+
+
+    type PivotTableHeaders<'groupingHeader> =
+        { NormalColumnHeaders: NormalColumnTreeHeader al1List
+          GroupingColumnHeaderRows: GroupingColumnHeaderRow<'groupingHeader> al1List }
+
+    type PivotTableHeadersParser =
+        static member Parser(start: MatrixParser<_>, groupingColumnParser: GroupingColumnParser<_, _>, rowsCount, ?mxColManySkip_maxSkipCount) =
+            let mxColManySkip_maxSkipCount = defaultArg mxColManySkip_maxSkipCount 5
+            start
+            |> MatrixParser.collectOutputStream(fun outputStream ->
+                let rerangedResult = OutputMatrixStream.reRangeRowTo rowsCount outputStream
+
+                runMatrixParserForRangeWithStreamsAsResult rerangedResult.Range (groupingColumnParser.GroupingHeaders)
+                |> OutputMatrixStream.removeRedundants
+                |> List.tryExactlyOne
+                |> function
+                    | Some groupingHeadersOutputStream ->
+                        let leftNormalColumns =
+                            let leftNormalColumnsRerangedResult = 
+                                let columnsCount = 
+                                    groupingHeadersOutputStream.Range.Column -
+                                        outputStream.Range.Column 
+                                        
+                                rerangedResult.SetColumnTo(columnsCount) 
+
+                            let normalColumnTreeHeaderParser =
+                                NormalColumnTreeHeader.Parser(mxNonEmpty, rowsCount)
+
+                            (mxColManySkip mxSpace mxColManySkip_maxSkipCount normalColumnTreeHeaderParser)
+                                .InvokeToResults(leftNormalColumnsRerangedResult.InputMatrixStream)
+                            |> List.exactlyOne
+                            |> AtLeastOneList.Create
+
+                        let rightNormalColumnsOutputStream =
+                            let rightNormalColumnsRerangedResult = 
+                                rerangedResult.RightOf(groupingHeadersOutputStream.OffsetedRange)
+
+                            let normalColumnTreeHeaderParser =
+                                NormalColumnTreeHeader.Parser(mxNonEmpty, rowsCount)
+
+                            let outputStreams = 
+                                (mxColManySkip mxSpace mxColManySkip_maxSkipCount normalColumnTreeHeaderParser)
+                                    .Invoke(rightNormalColumnsRerangedResult.InputMatrixStream)
+                            
+                            outputStreams
+                            |> List.exactlyOne
+
+                        //reranged = outputStream.Range.Offset(0, 0, rowsCount)
+                        //groupingHeaders
+                        let columnsCount = 
+                            rightNormalColumnsOutputStream.OffsetedRange.Column -
+                                outputStream.Range.Column 
+                                
+
+                        let rightNormalColumns =
+                            rightNormalColumnsOutputStream.Result.Value
+
+                        let newOutputStream =
+                            outputStream.ShiftBy(columnsCount, rowsCount-1)
+                            |> OutputMatrixStream.mapResultValue (fun _ ->
+                                { NormalColumnHeaders = leftNormalColumns.Add rightNormalColumns 
+                                  GroupingColumnHeaderRows = groupingHeadersOutputStream.Result.Value }
+                            )
+
+                        [newOutputStream]
+                    | None -> []
+            )
+
+    type PivotTableBorderParser<'result> internal (parser: MatrixParser<'result>) =
+        member x.Rerange(f: MatrixParser<_>) =
+            parser
+            |> MatrixParser.collectOutputStream(fun outputStream ->
+                let resetedInputStream = (OutputMatrixStream.reRangeByShift outputStream).InputMatrixStream
+                f.Invoke resetedInputStream
+            )
+
+    type PivotTableBorderParser =
+        static member Create(start: MatrixParser<_>, groupingColumnParser: GroupingColumnParser<_, _>, ?rightBorder) =
+            let rightBorder =
+                match rightBorder with 
+                | Some rightBorder ->
+                    c2 groupingColumnParser.Value (mxUntilA50 rightBorder) ||>> ignore
+
+                | None -> (groupingColumnParser.Value) ||>> ignore
+
+
+            c2 start (   
+                mxUntilA50 rightBorder
+            )
+            |> PivotTableBorderParser
+    
+    type NormalColumn =
+        { Header: string 
+          Values: obj list }
+    with 
+        static member internal CreateIncludeHeader(values: obj list) =
+            let header = 
+                match values.[0] with 
+                | null -> ""
+                | value -> value.ToString()
+            let values = values.[1..]
+            { Header = header 
+              Values = values }
+
+
+    type PivotTable<'groupingColumnHeader, 'groupingColumnElement> =
+        { NormalColumns: NormalColumn al1List
+          GroupingColumn: GroupingColumn<'groupingColumnHeader, 'groupingColumnElement> }
+
+    type PivotTable = 
+        static member Parser(start: MatrixParser<_>, groupingColumnParser: GroupingColumnParser<'groupingHeader, 'groupingElement>, ?rightBorder) =
+            let parser =
+                let border = 
+                    PivotTableBorderParser.Create(start = start, groupingColumnParser = groupingColumnParser, ?rightBorder = rightBorder)
+                
+                border.Rerange(
+                    let startToGroupingColumns =
+                        (mxUntil 
+                            Direction.Horizontal 
+                            None 
+                            (mxRowMany1 mxAnyOriginObj)
+                            (groupingColumnParser.Value)
+                        )
+
+                    match rightBorder with 
+                    | Some rightBorder ->
+                        c2 startToGroupingColumns (mxColMany1 (mxRowMany1 mxAnyOriginObj))
+                    | None -> 
+                        startToGroupingColumns
+                        ||>> fun a -> a, []
+
+                ) 
+                ||>> fun ((normalColumns, groupingColumn), rightNormalColumns) -> 
+                    let normalColumns =
+                        normalColumns @ rightNormalColumns
+                        |> List.map NormalColumn.CreateIncludeHeader
+                    
+                    { NormalColumns = AtLeastOneList.Create normalColumns 
+                      GroupingColumn = groupingColumn }
+    
+            parser
+    
 
     

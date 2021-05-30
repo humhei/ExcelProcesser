@@ -61,7 +61,7 @@ let pFParsec (p : Parser<_, _>) =
         | _ -> None
 
 
-let pSpace range = pTextf (fun text -> text.Trim() = "") range
+let pSpace range = pTextf isTrimmedTextEmpty range
 
 let pAny : CellParser = fun _ -> true
 
