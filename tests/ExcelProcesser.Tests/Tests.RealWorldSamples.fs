@@ -28,7 +28,7 @@ let realWorldSamples =
     testCase "19SPX16" <| fun _ -> 
         use excelPackage = new ExcelPackage(FileInfo(XLPath.RealWorldSamples.``19SPX16合同附件``))
         
-        let worksheet = ValidExcelWorksheet(excelPackage.Workbook.Worksheets.["Sheet1"])
+        let worksheet = ValidExcelWorksheet.Create(excelPackage.Workbook.Worksheets.["Sheet1"])
 
         let record = Types.XLPath.RealWorldSamples.Module_嘴唇.Record.Parse(worksheet)
 
@@ -46,4 +46,26 @@ let realWorldSamples =
 
 
         pass()
+
+
+    ftestCase "DIS26677装箱单" <| fun _ ->
+        use excelPackage = new ExcelPackage(FileInfo(XLPath.RealWorldSamples.DIS26677装箱单))
+        let worksheet = ValidExcelWorksheet.Create(excelPackage.Workbook.Worksheets.["PACKING LIST"])
+        let parser =
+            
+            r2
+                (
+                    c2 
+                        (mxRegex "Discription") 
+                        (mxUntilA50 (mxRegex "VOLUME"))
+                )
+                (
+                    mxUntilA50 (mxRegex "Total")
+                )
+            
+        let parser = parser.InDebug
+
+        let r = runMatrixParserWithStreamsAsResult worksheet parser
+        pass()
+
   ]

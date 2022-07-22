@@ -7,6 +7,7 @@ open Tests.MatrixTests
 open Tests.MathTests
 open Tests.SematicsParsers
 open Tests.RealWorldSamples
+open Tests
 
 let testConfig =  
     { Expecto.Tests.defaultConfig with 
@@ -18,7 +19,8 @@ let liteDbTests =
         shiftTests
         matrixTests
         mathTests
-        sematicsParsers 
+        SematicsParsers.Normal.tests
+        SematicsParsers.RangeInHeader.tests
         realWorldSamples
     ]
 

@@ -1,6 +1,5 @@
 # ExcelProcesser
 Parse excel file with combinator
-
 Stable | Prerelease
 --- | ---
 [![NuGet Badge](https://buildstats.info/nuget/ExcelProcesser)](https://www.nuget.org/packages/ExcelProcesser/) | [![NuGet Badge](https://buildstats.info/nuget/ExcelProcesser?includePreReleases=true)](https://www.nuget.org/packages/ExcelProcesser/)

@@ -25,6 +25,7 @@ module XLPath =
     module RealWorldSamples =
         let private fullPath name = Path.GetFullPath("resources/real world samples/" + name)
 
+        let ``DIS26677装箱单`` = fullPath "DIS26677装箱单.xlsx"
         let ``19SPX16合同附件`` = fullPath "19SPX16合同生产细节.xlsx"
         let ``19SPX16Merge`` = fullPath "19SPX16Merge.csv"
 

@@ -16,7 +16,7 @@ let excelPackage = new ExcelPackage(FileInfo(XLPath.testData))
 
 let worksheet = 
     excelPackage.Workbook.Worksheets.["Math"]
-    |> ValidExcelWorksheet
+    |> ValidExcelWorksheet.Create
 
 
 let mathTests =

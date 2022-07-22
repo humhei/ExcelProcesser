@@ -16,7 +16,7 @@ let excelPackage = new ExcelPackage(FileInfo(XLPath.testData))
 
 let worksheet = 
     excelPackage.Workbook.Worksheets.["Matrix"]
-    |> ValidExcelWorksheet
+    |> ValidExcelWorksheet.Create
 
 let shiftTests =
   ptestList "ShiftTests" [
@@ -325,7 +325,7 @@ let matrixTests =
         let results = 
             runMatrixParser 
                 worksheet 
-                (mxColManySkip mxSpace 1 (mxTextf(fun text -> text.StartsWith "cm_skip")))
+                (mxColMany1Skip mxSpace 1 (mxTextf(fun text -> text.StartsWith "cm_skip")))
         match results with 
         | ["cm_skip_1"; "cm_skip_2"; "cm_skip_3"] :: _  -> pass()
         | _ -> fail()
@@ -334,7 +334,7 @@ let matrixTests =
         let results = 
             runMatrixParserWithStreamsAsResult
                 worksheet
-                (mxColManySkip mxSpace 1 (mxTextf(fun text -> text.StartsWith "cm_skip_backTrack")))
+                (mxColMany1Skip mxSpace 1 (mxTextf(fun text -> text.StartsWith "cm_skip_backTrack")))
         match results.[0].Shift.Last with 
         | Horizontal ({X = 0; Y = 0},2)  -> pass()
         | _ -> fail()
@@ -354,7 +354,26 @@ let matrixTests =
         | (("mx_until1", ("mx_until4")), "mx_util5") :: _  -> pass()
         | _ -> fail()
 
+    testCase "mxMany1Op" <| fun _ -> 
+        let streams = 
+            let parser =
+                c2 
+                    ((mxText "mxMany1Op_Starter"))
+                    (mxColMany1Op 1 (mxTextf(fun text -> text.StartsWith "cm")))
+            runMatrixParserWithStreamsAsResult 
+                worksheet 
+                    parser
 
+
+        let results = 
+            streams
+            |> List.map (fun m -> m.Result.Value)
+            |> List.exactlyOne
+            |> snd
+
+        match results with 
+        | [None; Some ("cm_op_1"); Some ("cm_op_2"); None; Some ("cm_op_3")] -> pass()
+        | _ -> fail()
 
 
     testCase "cross area1 reRange" <| fun _ -> 

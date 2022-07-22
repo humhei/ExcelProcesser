@@ -9,15 +9,22 @@
     <Compile Include="CellParsers.fs" />
     <Compile Include="MatrixParsers.fs" />
     <Compile Include="MathParsers.fs" />
-    <Compile Include="SematicsParsers.fs" />
+    <Compile Include="SematicsParsers\ContentsTable.fs" />
+    <Compile Include="SematicsParsers\Normal.fs" />
+    <Compile Include="SematicsParsers\RangeInHeader.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="CellScript.Core" Version="0.1.131" />
+    <PackageReference Include="CellScript.Core" Version="0.1.276" />
     <PackageReference Include="Deedle" Version="2.1.2" />
     <PackageReference Include="EPPlus" Version="4.5.3.3" />
     <PackageReference Include="FParsec" Version="1.1.1" />
     <PackageReference Include="NLog" Version="4.7.7" />
-    <PackageReference Include="Shrimp.FSharp.Plus" Version="1.1.89" />
+    <PackageReference Include="Shrimp.FSharp.Plus" Version="1.1.414" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="5.0.1" />
   </ItemGroup>
 </Project>
