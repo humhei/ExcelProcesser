@@ -19,7 +19,7 @@ let worksheet =
     |> ValidExcelWorksheet.Create
 
 let shiftTests =
-  ptestList "ShiftTests" [
+  testList "ShiftTests" [
 
     testCase "start + Horizontal ({X = 0; Y = 0;},1) + Direction.Horizontal = Horizontal {0,0},2" <| fun _ -> 
         let shift = 
@@ -42,7 +42,7 @@ let shiftTests =
             let shift = Compose [Horizontal ({X = 0; Y = 0;},1);Vertical({X = 1; Y =0},1) ;Horizontal({X=1; Y =1},1)]
             Shift.applyDirection (Start) Direction.Horizontal shift
         match shift.Last with 
-        | Horizontal({X = 2; Y = 0},0) -> pass()
+        | Horizontal({X = 0; Y = 0},2) -> pass()
         | _ -> fail()
 
   ]
@@ -57,6 +57,15 @@ let matrixTests =
         let results = runMatrixParserSafe worksheet parser
         match results.AsList with 
         | ["mxTextA"] -> pass()
+        | _ -> fail()
+
+    ftestCase "mxEOF" <| fun _ -> 
+        let parser =
+            c2 (mxText "mxEOF_STRAT") (mxUntil1 Direction.Horizontal None (mxAnyOrigin) (mxEOF))
+
+        let results = runMatrixParser worksheet (parser)
+        match results with 
+        | ["mxEOF_STRAT", ([""; ""; ""; ""; ""; ""; ""; "mxEOF_R2"; "mxEOF_END"],_)] -> pass()
         | _ -> fail()
 
     testCase "mxOR" <| fun _ -> 

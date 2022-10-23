@@ -27,4 +27,5 @@ let liteDbTests =
 
 [<EntryPoint>]
 let main argv = 
-    runTests testConfig liteDbTests
+    runTests testConfig liteDbTests |> ignore
+    Console.Read()

@@ -40,6 +40,8 @@ with
             | _ -> shift
         loop x
 
+        
+
 
 
     member internal x.Folded =
@@ -67,6 +69,30 @@ module Shift =
         | Horizontal _ -> true 
         | _ -> false
 
+    let verticalOffsets shift = 
+        let rec loop shift =
+            match shift with 
+            | Horizontal (coordinate, _) -> [coordinate.Y] 
+            | Start _ -> [0]
+            | Vertical (coordinate, offset) -> [coordinate.Y + offset]
+            | Compose shifts -> 
+                shifts
+                |> List.collect loop
+
+        loop shift
+
+    let horizontalOffsets shift = 
+        let rec loop shift =
+            match shift with 
+            | Horizontal (coordinate, offset) -> [coordinate.X + offset] 
+            | Start _ -> [0]
+            | Vertical (coordinate, _) -> [coordinate.X]
+            | Compose shifts -> 
+                shifts
+                |> List.collect loop
+
+        loop shift
+
     let isInDirectionOrStart (direction) shift = 
         match shift with 
         | Shift.Start -> true
@@ -77,14 +103,16 @@ module Shift =
 
     let private redirect (preCalculatedCoordinate: Coordinate) (direction: Direction) (shifts: Shift list) =
         if List.forall (fun shift -> true (*length shift = 1*)) shifts then 
+            let indexedShifts = List.indexed shifts
             match direction with 
             | Direction.Horizontal ->
-                let chooser shift =
+                let chooser (index: int, shift) =
                     match shift with 
                     | Shift.Horizontal (coordinate,i) ->
                         if coordinate.Y = preCalculatedCoordinate.Y 
                         then 
                             Some (
+                                index,
                                 Horizontal(
                                     coordinate,
                                     i + 1
@@ -96,6 +124,7 @@ module Shift =
                         if coordinate.Y = preCalculatedCoordinate.Y 
                         then 
                             Some (
+                                index,
                                 Horizontal(
                                     { coordinate with X = coordinate.X + 1},
                                     0
@@ -104,19 +133,22 @@ module Shift =
                         else None
                     | _ -> None
 
-                match List.tryPick chooser shifts with 
-                | Some shift ->
-                    Compose (shift :: shifts)
+                match List.tryPick chooser indexedShifts with 
+                | Some (i, shift) ->
+                    match i with 
+                    | 0 -> Compose (shift :: shifts.Tail)
+                    | _ -> Compose (shift :: shifts)
                 | None ->
-                    failwithf "not implemented preCalculatedCoordinate %A direction %A shifts %A" preCalculatedCoordinate direction shifts
+                    failwithf "not implemented preCalculatedCoordinate %A direction %A shifts %A" preCalculatedCoordinate direction indexedShifts
 
             | Direction.Vertical ->
-                let chooser shift =
+                let chooser (index, shift) =
                     match shift with 
                     | Shift.Horizontal (coordinate,i) ->
                         if coordinate.X = preCalculatedCoordinate.X 
                         then 
                             Some (
+                                index,
                                 Vertical(
                                     { coordinate with Y = coordinate.Y + 1},
                                     0
@@ -127,6 +159,7 @@ module Shift =
                         if coordinate.X = preCalculatedCoordinate.X 
                         then 
                             Some (
+                                index,
                                 Vertical(
                                     coordinate,
                                     i + 1
@@ -135,9 +168,12 @@ module Shift =
                         else None
                     | _ -> None
 
-                match List.tryPick chooser shifts with 
-                | Some shift ->
-                    Compose (shift :: shifts)
+                match List.tryPick chooser indexedShifts with 
+                | Some (i, shift) ->
+                    match i with 
+                    | 0 -> Compose (shift :: shifts.Tail)
+                    | _ -> Compose (shift :: shifts)
+
                 | None ->
                     failwithf "not implemented preCalculatedCoordinate %A direction %A shifts %A" preCalculatedCoordinate direction shifts
             | _ -> failwith "Invalid token"
@@ -156,7 +192,8 @@ module Shift =
             | Direction.Horizontal -> Horizontal (coordinate, i + 1)
             | Direction.Vertical -> 
                 if coordinate = Coordinate.origin then 
-                    Vertical ({ X = 0; Y = 0},1)
+                    //Vertical ({ X = 0; Y = 0},1)
+                    Compose[Vertical ({ X = 0; Y = 0},1); shift]
                 else failwith "not implemented"
             | _ -> failwith "Invalid token"
 
@@ -164,7 +201,8 @@ module Shift =
             match direction with 
             | Direction.Horizontal -> 
                 if coordinate = Coordinate.origin then 
-                    Horizontal ({ X = 0; Y = 0},1)
+                    //Horizontal ({ X = 0; Y = 0},1)
+                    Compose[Horizontal ({ X = 0; Y = 0},1); shift]
                 else failwith ""
             | Direction.Vertical -> Vertical (coordinate, i + 1)
             | _ -> failwith "Invalid token"
@@ -390,7 +428,7 @@ type RangeTransformer(range: ExcelRangeBase) =
 
 type OutputMatrixStream<'result> =
     { Range: SingletonExcelRangeBase
-      Shifts: Shift list
+      Shift: Shift
       Logger: Logger
       ParsingAddress: ParsingAddress
       Result: OutputMatrixStreamResult<'result> }
@@ -400,6 +438,25 @@ with
     member stream.OffsetedRange =
         SingletonExcelRangeBase.offset stream.Shift stream.Range
     
+
+    member stream.RangeToOffsetedRange_AllShifts =
+        let shift = stream.Shift
+        let vertialOffset = 
+            shift
+            |> Shift.verticalOffsets
+            |> List.max
+
+        let horizontalOffset =
+            shift
+            |> Shift.horizontalOffsets
+            |> List.max
+          
+        stream.Range.RangeTo(
+            stream.Range.Offset(
+                vertialOffset, horizontalOffset
+            )
+        )
+
 
     member stream.RangeToOffsetedRange =
         stream.Range.RangeTo(stream.OffsetedRange)
@@ -552,8 +609,9 @@ module OutputMatrixStream =
             Shift.isInDirectionOrStart direction stream.Shift.Last
         if stream.Result.IsSkip && isInSomeDirectionOrStart then stream
         else
+            let newShift = Shift.applyDirection preInputstream.Shift direction stream.Shift
             { stream with 
-                Shift = Shift.applyDirection preInputstream.Shift direction stream.Shift }
+                Shift = newShift }
 
     let mapResult mapping (stream: OutputMatrixStream<'result>) =
         
@@ -739,8 +797,7 @@ module MatrixParser =
             let (outputStreams: OutputMatrixStream<'result> list) = p inputStream
             List.filter (fun outputStream -> f outputStream.Result.Value) outputStreams
 
-
-let mxCellParserOp (cellParser: SingletonExcelRangeBase -> 'result option) =
+let private mxCellParserOp_common (cellParser: InputMatrixStream -> SingletonExcelRangeBase -> 'result option) =
     fun (stream: InputMatrixStream) ->
         let offsetedRange = stream.OffsetedRange
         let addr = offsetedRange.ExcelCellAddress
@@ -748,7 +805,7 @@ let mxCellParserOp (cellParser: SingletonExcelRangeBase -> 'result option) =
         match addr.Row, addr.Column with 
         | Between(streamAddr.StartRow, streamAddr.EndRow),
             Between(streamAddr.StartColumn, streamAddr.EndColumn) ->
-            match cellParser offsetedRange with 
+            match cellParser stream offsetedRange with 
             | Some result ->
                 { Range = stream.Range 
                   Shift = stream.Shift 
@@ -762,6 +819,9 @@ let mxCellParserOp (cellParser: SingletonExcelRangeBase -> 'result option) =
             | None -> None
         | _ -> None
     |> SingletonMatrixParser
+
+let mxCellParserOp (cellParser: SingletonExcelRangeBase -> 'result option) =
+    mxCellParserOp_common(fun _ range -> cellParser range)
 //let mxCellParser_Result (cellParser: SingletonExcelRangeBase -> Result<'ok, string>) =
 //    mxCellParserOp (fun range ->
 //        match cellParser range with 
@@ -896,6 +956,34 @@ let (|||>>) p f =
        OutputMatrixStream.mapResultValue (f (outputStream)) outputStream
     ) p
 
+let mxEOF  =
+    fun (stream: InputMatrixStream) ->
+        let offsetedRange = stream.OffsetedRange
+        let addr = offsetedRange.ExcelCellAddress
+        let streamAddr = stream.ParsingAddress
+        match addr.Row, addr.Column with 
+        | Between(streamAddr.StartRow, streamAddr.EndRow),
+            Between(streamAddr.StartColumn, streamAddr.EndColumn) ->
+            None
+
+        | _ -> 
+            { Range = stream.Range 
+              Shift = stream.Shift 
+              ParsingAddress = stream.ParsingAddress
+              Result = 
+                { IsSkip = false
+                  Value = () }
+              Logger = stream.Logger
+            }
+            |> Some
+    |> SingletonMatrixParser
+
+let mxNotEOF()  =
+    mxCellParserOp_common (fun inputStream range ->
+        match inputStream.ParsingAddress.ComparableExcelAddress.Contains(range.ExcelAddress) with 
+        | true -> Some range.Text
+        | false -> None
+    )
 
 let mxOR (p1: MatrixParser<'result1>) (p2: MatrixParser<'result2>) =
     let p1 = 
@@ -984,6 +1072,7 @@ let private pipe2RelativelyWithTupleStreamsReturn (direction: Direction) (p1: Ma
 
 
 let private pipe2Relatively (direction: Direction) (p1: MatrixParser<'result1>) (buildP2: OutputMatrixStream<'result1> -> MatrixParser<'result2>) f =
+    
     pipe2RelativelyWithTupleStreamsReturn direction p1 buildP2 f
     >> List.map snd
     |> MatrixParser
@@ -1230,6 +1319,9 @@ let mxUntilBacktrackLast direction maxCount pPrevious (pLast: MatrixParser<'resu
 let mxUntil1 direction maxCount pPrevious (pLast: MatrixParser<'result>) =
     pipe2 direction (mxMany1WithMaxCount direction maxCount (pPrevious <&!> pLast)) pLast id
 
+
+
+
 let mxUntil1NoConfict direction maxCount pPrevious (pLast: MatrixParser<'result>) =
     pipe2 direction (mxMany1WithMaxCount direction maxCount (pPrevious)) pLast id
 
@@ -1248,6 +1340,12 @@ let mxUntilIND maxCount pPrevious (pLast: MatrixParser<'result>) =
         mxUntil direction maxCount pPrevious (pLast: MatrixParser<'result>)
     )
 
+let mxUntilIND_EOF pPrevious =
+    inDirection (fun direction ->
+        mxUntil1 direction None (pPrevious) (mxEOF)
+    )
+
+
 /// Space >>. pUntil
 let mxUntilS maxCount (p: MatrixParser<'result>) =
     inDirection (fun direction ->
@@ -1261,6 +1359,9 @@ let mxUntilA maxCount (p: MatrixParser<'result>) =
         mxUntil direction maxCount mxAnySkip p
     )
     ||>> snd
+
+
+
 
 let mxUntilIND50 pPrevious (pLast: MatrixParser<'result>) = mxUntilIND (Some 50) pPrevious (pLast: MatrixParser<'result>)
 

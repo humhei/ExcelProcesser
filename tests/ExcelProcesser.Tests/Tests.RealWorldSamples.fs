@@ -48,7 +48,7 @@ let realWorldSamples =
         pass()
 
 
-    ftestCase "DIS26677装箱单" <| fun _ ->
+    testCase "DIS26677装箱单" <| fun _ ->
         use excelPackage = new ExcelPackage(FileInfo(XLPath.RealWorldSamples.DIS26677装箱单))
         let worksheet = ValidExcelWorksheet.Create(excelPackage.Workbook.Worksheets.["PACKING LIST"])
         let parser =

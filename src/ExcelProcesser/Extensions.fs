@@ -100,7 +100,9 @@ type ComparableExcelCellAddress with
 [<DebuggerDisplay("{Address} {Text}")>]
 [<StructuredFormatDisplay("{Address} {Text}")>]
 type SingletonExcelRangeBase private (range: ExcelRangeBase) =
-    
+    let addr = ComparableExcelAddress.OfRange range
+
+    let cellAddr = ComparableExcelCellAddress.OfExcelCellAddress(ExcelCellAddress(range.Address))
     member x.Value = range.Value
 
     member x.Style = range.Style
@@ -121,7 +123,9 @@ type SingletonExcelRangeBase private (range: ExcelRangeBase) =
 
     member x.Address = range.Address
 
-    member val ExcelCellAddress = ComparableExcelCellAddress.OfExcelCellAddress(ExcelCellAddress(range.Address))
+    member x.ExcelCellAddress = cellAddr
+
+    member x.ExcelAddress = addr
 
     member x.Text = range.Text
 
