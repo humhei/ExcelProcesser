@@ -23,7 +23,13 @@ let mathTests =
   testList "MathTests" [
     testCase "mxSumContinuously" <| fun _ -> 
         let results = runMatrixParser worksheet (mxSumContinuously Direction.Vertical)
+        #if TestVirtual
+        match results with 
+        | [] -> pass()
+        | _ -> fail()
+        #else
         match results with 
         | ([1;2], 3) :: _ -> pass()
         | _ -> fail()
+        #endif
   ]

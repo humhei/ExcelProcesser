@@ -342,7 +342,7 @@ let matrixTests =
         | ["cm_skip_1"; "cm_skip_2"; "cm_skip_3"] :: _  -> pass()
         | _ -> fail()
 
-    ptestCase "emptyRow" <| fun _ -> 
+    testCase "emptyRow" <| fun _ -> 
         let parser = 
             r2
                 (c2 (mxText "mxEmptyRow_Starter") (mxUntilA10 (mxText "mxEmptyRow_End")))
@@ -356,7 +356,14 @@ let matrixTests =
                 worksheet 
                 (parser)
 
-        failwith ""
+        match results with 
+        | [result] ->
+            match result.Result.Value with 
+            | (("mxEmptyRow_Starter", "mxEmptyRow_End"), [["1"; _; _]; ["2"; _; _]; [_; _; "3"]]) -> 
+                pass()
+            | _ -> fail ()
+
+        | _ -> fail()
         
 
     testCase "column many with skip backtrack" <| fun _ -> 
@@ -421,15 +428,19 @@ let matrixTests =
                     )
                     (mxText "Cross_1I")
                 )
-        results 
-        |> List.map (OutputMatrixStream.reRangeByShift >> (fun (rerangedResult) -> 
-            let ranges = ExcelRangeUnion.asRangeList rerangedResult.Range
-            List.map SingletonExcelRangeBaseUnion.getText ranges
-            |> List.distinct
-        ))
-        |> function
-            | ["Cross_1A"; "Cross_1B";"Cross_1E";"Cross_1F";"Cross_1C";"Cross_1D";"Cross_1G";"Cross_1H";"Cross_1I"] :: _ -> pass()
-            | _ -> fail()
+
+        let result = 
+            results 
+            |> List.map (OutputMatrixStream.reRangeByShift >> (fun (rerangedResult) -> 
+                let ranges = ExcelRangeUnion.asRangeList rerangedResult.Range
+                List.map SingletonExcelRangeBaseUnion.getText ranges
+                |> List.distinct
+            ))
+
+        match result with 
+        | ["Cross_1A"; "Cross_1B";"Cross_1E";"Cross_1F";"Cross_1C";"Cross_1D";"Cross_1G";"Cross_1H";"Cross_1I"] :: _ -> pass()
+        | _ -> fail()
+
 
     testCase "cross area2 reRange" <| fun _ -> 
         let results = 
@@ -457,16 +468,33 @@ let matrixTests =
 
     testCase "mxMergeStarter" <| fun _ -> 
         let results = runMatrixParser worksheet (mxMergeStarter ||>> fun mergeStarter -> mergeStarter.Text)
+        #if TestVirtual
+        match results with 
+        | [] -> pass()
+        | _ -> fail()
+        #else
         match results with 
         | "Merge1" :: "Merge2":: _ -> pass()
         | _ -> fail()
+        #endif
+
+
 
     testCase "mxMerge horizontal" <| fun _ -> 
         let results = 
             runMatrixParser worksheet ((mxMergeWithAddresses Direction.Horizontal) ||>> fun (mergeStarter,_) -> mergeStarter.Text)
+        
+        #if TestVirtual
+        match results with 
+        | [] -> pass()
+        | _ -> fail()
+        #else
         match results with 
         | ["Merge1"; "Merge2"] -> pass()
         | _ -> fail()
+        #endif
+        
+
         
 
 

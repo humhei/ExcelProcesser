@@ -19,8 +19,10 @@ let liteDbTests =
         shiftTests
         matrixTests
         mathTests
+        #if !TestVirtual
         SematicsParsers.Normal.tests
         SematicsParsers.RangeInHeader.tests
+        #endif
         realWorldSamples
     ]
 

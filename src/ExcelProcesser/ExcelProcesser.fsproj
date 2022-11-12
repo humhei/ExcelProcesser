@@ -3,7 +3,13 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net462</TargetFrameworks>
       <Version>99.99.99</Version>
+      <Configurations>Debug;Release;TestVirtual</Configurations>
   </PropertyGroup>
+    <PropertyGroup Condition="'$(Configuration)'=='TestVirtual'">
+        <Optimize>False</Optimize>
+        <Tailcalls>False</Tailcalls>
+        <DefineConstants>TestVirtual</DefineConstants>
+    </PropertyGroup>
   <ItemGroup>
     <Compile Include="Extensions.fs" />
     <Compile Include="Types.fs" />
@@ -15,7 +21,7 @@
     <Compile Include="SematicsParsers\RangeInHeader.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="CellScript.Core" Version="0.1.315" />
+    <PackageReference Include="CellScript.Core" Version="0.1.316" />
     <PackageReference Include="Deedle" Version="2.1.2" />
     <PackageReference Include="EPPlus" Version="4.5.3.3" />
     <PackageReference Include="FParsec" Version="1.1.1" />

@@ -1,6 +1,9 @@
 ﻿
 
 namespace ExcelProcesser
+
+open System.Diagnostics
+
 #nowarn "0104"
 open FParsec
 open System.Collections.Generic
@@ -16,46 +19,58 @@ type Formula =
 exception VirtualSingletonExcelRangeNotSupportedPropsException = exn
 
 type VirtualSingletonExcelRange =
-    { CellRelativeAddress: ComparableExcelCellAddress 
-      RootData: ConvertibleUnion [,]
-      Starter: ComparableExcelCellAddress }
+    { ExcelCellAddress: ComparableExcelCellAddress 
+      RootData: ConvertibleUnion [,] }
 with 
-    
-    member x.CellAddress = 
-        x.CellRelativeAddress.Offset(x.Starter.Row, x.Starter.Column)
+        
 
-    member x.Address = x.CellAddress.ExcelCellAddress.Address
+    member x.Address = x.ExcelCellAddress.ExcelCellAddress.Address
 
     member x.Offset(rowOffset, columnOffset) =
         { x with 
-            CellRelativeAddress = x.CellRelativeAddress.Offset(rowOffset, columnOffset)
+            ExcelCellAddress = x.ExcelCellAddress.Offset(rowOffset, columnOffset)
         }
 
-    member x.Column = x.CellAddress.Column
+    member x.Column = x.ExcelCellAddress.Column
 
-    member x.Row = x.CellAddress.Row
+    member x.Row = x.ExcelCellAddress.Row
 
     member x.Value = 
-        x.RootData.[x.CellAddress.Row-1, x.CellAddress.Column-1]
+        let l1 = Array2D.length1 x.RootData
+        let l2 = Array2D.length2 x.RootData
+        let row = x.ExcelCellAddress.Row
+        let column = x.ExcelCellAddress.Column
+
+        if row > l1 || column > l2 
+        then ConvertibleUnion.Missing
+        else x.RootData.[row-1, column-1]
 
     member x.Text = x.Value.Text
 
 
 type VirtualExcelRange =
-    { RelativeAddress: ComparableExcelAddress 
-      RootData: ConvertibleUnion [,]
-      Starter: ComparableExcelCellAddress }
+    { ExcelAddress: ComparableExcelAddress 
+      RootData: ConvertibleUnion [,]  }
 with 
+    static member internal OfData(data: ConvertibleUnion [,]) =
+        { ExcelAddress =
+            { StartRow    = 1
+              StartColumn = 1
+              EndRow      = Array2D.length1 data
+              EndColumn   = Array2D.length2 data 
+            }
+          RootData = data
+        }
+
     member x.AsCellRanges() =
-        x.RelativeAddress.AsCellAddresses()
+        x.ExcelAddress.AsCellAddresses()
         |> List.map(fun addr ->
-            { CellRelativeAddress = addr 
-              RootData = x.RootData
-              Starter = x.Starter }
+            { ExcelCellAddress = addr 
+              RootData = x.RootData  }
         )
 
-    member x.ComparableExcelAddress: ComparableExcelAddress = 
-        x.RelativeAddress.Offset(x.Starter.Row, x.Starter.Column)
+
+    member x.ComparableExcelAddress: ComparableExcelAddress = x.ExcelAddress
      
 
     member x.End =
@@ -66,6 +81,11 @@ with
         { Row = x.ComparableExcelAddress.StartRow
           Column = x.ComparableExcelAddress.StartColumn }
 
+    member internal x.StarterValue = 
+        let start = x.Start
+        x.RootData.[start.Row-1, start.Column-1]
+
+
     member x.Columns = x.ComparableExcelAddress.Columns
 
     member x.Address = x.ComparableExcelAddress.Address
@@ -73,60 +93,35 @@ with
     member x.Rows = x.ComparableExcelAddress.Rows
 
     member x.Offset(rowOffset, columnOffset, numberOfRows, numberOfColumns) =
-        let rowStart = x.RelativeAddress.StartRow + rowOffset
-        let columnStart = x.RelativeAddress.StartColumn + columnOffset
-        let rowEnd = rowStart + numberOfRows
-        let columnEnd = columnStart + numberOfColumns
+        let addr = x.ExcelAddress.Offset(rowOffset, columnOffset, numberOfRows, numberOfColumns) 
 
-        let addr = 
-            { StartRow = rowStart
-              StartColumn = columnStart
-              EndRow  = rowEnd
-              EndColumn = columnEnd }
-
-        { RelativeAddress = addr  
-          RootData = x.RootData
-          Starter = x.Starter }
+        { ExcelAddress = addr  
+          RootData = x.RootData }
 
     member x.Rerange(address: string) =
         let address = ComparableExcelAddress.OfAddress address
-        let rootData =
-            x.RootData.[address.StartRow-1..address.EndRow-1, address.StartColumn-1..address.EndColumn-1]
 
-        let starter = x.Starter.Offset(address.Start.Row-1, address.Start.Column-1)
-
-        { RelativeAddress = 
-            {StartColumn = 1
-             StartRow = 1
-             EndRow = address.Rows
-             EndColumn = address.EndColumn }
-          Starter  = starter
-          RootData = rootData
+        { ExcelAddress = address
+          RootData = x.RootData
         }
 
 type VirtualSingletonExcelRange with 
     member x.AsRange =
         { RootData = x.RootData 
-          Starter = x.Starter
-          RelativeAddress = 
-            { StartRow = x.CellRelativeAddress.Row
-              EndRow = x.CellRelativeAddress.Row
-              StartColumn = x.CellRelativeAddress.Column
-              EndColumn = x.CellRelativeAddress.Column }
+          ExcelAddress = 
+            { StartRow = x.ExcelCellAddress.Row
+              EndRow = x.ExcelCellAddress.Row
+              StartColumn = x.ExcelCellAddress.Column
+              EndColumn = x.ExcelCellAddress.Column }
           }
 
     member x.RangeTo(target: VirtualSingletonExcelRange) =
-        let starter =
-            [x.Starter; target.Starter]
-            |> List.exactlyOne_DetailFailingText
-
         let addr =
-            x.CellRelativeAddress.RangeTo(target.CellRelativeAddress)
+            x.ExcelCellAddress.RangeTo(target.ExcelCellAddress)
             |> ComparableExcelAddress.OfAddress
 
-        { RelativeAddress  = addr 
-          RootData = x.RootData
-          Starter = starter }
+        { ExcelAddress  = addr 
+          RootData = x.RootData }
 
     member x.Offset(rowOffset, columnOffset, numberOfRows, numberOfColumns) =
         x.AsRange.Offset(rowOffset, columnOffset, numberOfRows, numberOfColumns)
@@ -135,26 +130,26 @@ type VirtualSingletonExcelRange with
         let address =
             try 
                 { Row = 
-                    [ range.RelativeAddress.StartRow 
-                      range.RelativeAddress.EndRow ]
+                    [ range.ExcelAddress.StartRow 
+                      range.ExcelAddress.EndRow ]
                     |> List.exactlyOne_DetailFailingText
 
                   Column =
-                    [ range.RelativeAddress.StartColumn
-                      range.RelativeAddress.EndColumn ]
+                    [ range.ExcelAddress.StartColumn
+                      range.ExcelAddress.EndColumn ]
                     |> List.exactlyOne_DetailFailingText
                 }
             with ex ->
-                failwithf "Cannot create VirtualSingletonExcelRange from %A" range.RelativeAddress
+                failwithf "Cannot create VirtualSingletonExcelRange from %A" range.ExcelAddress
 
 
         {
-            Starter = range.Starter
             RootData = range.RootData
-            CellRelativeAddress = address
+            ExcelCellAddress = address
         }
 
-
+[<DebuggerDisplay("{Address} {Text}")>]
+[<StructuredFormatDisplay("{Address} {Text}")>]
 [<RequireQualifiedAccess>]
 type ExcelRangeUnion =
     | Office of ExcelRangeBase
@@ -166,6 +161,11 @@ with
         | Virtual v -> 
             v.Rerange(address)
             |> ExcelRangeUnion.Virtual
+
+    member private x.Text = 
+        match x with 
+        | Office v -> v.Text
+        | Virtual v -> v.StarterValue.Text
 
     member x.Address =
         match x with 
@@ -203,6 +203,8 @@ with
         | Virtual v -> v.Start
 
 
+[<DebuggerDisplay("{Address} {Text}")>]
+[<StructuredFormatDisplay("{Address} {Text}")>]
 
 [<RequireQualifiedAccess>]
 type SingletonExcelRangeBaseUnion =
@@ -210,6 +212,7 @@ type SingletonExcelRangeBaseUnion =
     | Virtual of VirtualSingletonExcelRange
 with 
         
+
     member x.Value =
         match x with 
         | Office v -> v.Value
@@ -273,7 +276,7 @@ with
     member x.Formula = 
         match x with 
         | Office v -> v.Formula
-        | Virtual _ -> raise VirtualSingletonExcelRangeNotSupportedPropsException
+        | Virtual _ -> ""
 
     member x.GetMergeCellId() =
         match x with 
@@ -294,7 +297,7 @@ with
     member x.TryGetMergedRangeAddress() =
         match x with 
         | Office v -> v.TryGetMergedRangeAddress()
-        | Virtual _ -> raise VirtualSingletonExcelRangeNotSupportedPropsException
+        | Virtual _ -> None
 
 
     member x.Text = 
@@ -311,7 +314,7 @@ with
     member x.ExcelCellAddress =
         match x with 
         | Office v -> v.ExcelCellAddress
-        | Virtual v -> v.CellAddress
+        | Virtual v -> v.ExcelCellAddress
 
     member x.ExcelAddress =
         match x with 
@@ -347,6 +350,11 @@ module ExcelRangeUnion =
 
         | ExcelRangeUnion.Virtual v ->
             v.AsCellRanges()
+            |> List.filter(fun m -> 
+                match m.Value with 
+                | ConvertibleUnion.Missing _ -> false
+                | _ -> true
+            )
             |> List.map SingletonExcelRangeBaseUnion.Virtual
 
 

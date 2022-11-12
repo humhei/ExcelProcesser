@@ -1625,6 +1625,8 @@ let runMatrixParserForRangeWithStreamsAsResult (range : ExcelRangeBase) (p : Mat
     let ranges = 
         ExcelRangeBase.asRangeList range
         |> List.map SingletonExcelRangeBaseUnion.Office
+
+
     let mses = runMatrixParserForRangesWithStreamsAsResult address ranges p
     mses
 
@@ -1690,10 +1692,21 @@ let runMatrixParserForRangeWithoutRedundent (range : ExcelRangeBase) (p : Matrix
 
 /// Including Empty Ranges
 let  private runMatrixParserWithStreamsAsResult_Common (worksheet: ValidExcelWorksheet) logger (p: MatrixParser<_>) =
+  
+    #if TestVirtual
+    let userRange =
+        let datas = worksheet.ReadDatas(RangeGettingOptions.UserRange)
+        datas.Content
+        |> VirtualExcelRange.OfData
+        |> fun m -> m.AsCellRanges()
+        |> List.map SingletonExcelRangeBaseUnion.Virtual
+    #else
     let userRange = 
         worksheet.Value
         |> ExcelWorksheet.getUserRangeList
         |> List.map SingletonExcelRangeBaseUnion.Office
+    #endif
+
 
     let addr =
         { 
