@@ -232,7 +232,7 @@ module  _RangeInHeader =
                             |> MatrixParser.collectOutputStream(fun outputStream ->
                                 let rerangedResult = OutputMatrixStream.reRangeRowTo rowsCount outputStream
                 
-                                runMatrixParserForRangeWithStreamsAsResultUnion rerangedResult.Range (groupingHeaderRows)
+                                runMatrixParserForRangeWithStreamsAsResult_Union rerangedResult.Range (groupingHeaderRows)
                                 |> OutputMatrixStream.removeRedundants
                                 |> List.tryExactlyOne
                                 |> function

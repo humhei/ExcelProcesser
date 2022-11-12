@@ -9,6 +9,7 @@ open CellParsers
 open FParsec.CharParsers
 open CellScript.Core
 open Shrimp.FSharp.Plus 
+open CellScript.Core.Extensions
 open System
 
 type Direction =
@@ -1618,19 +1619,8 @@ let private runMatrixParserForRanges addr (ranges : seq<SingletonExcelRangeBaseU
     mses |> List.map (fun ms -> ms.Result.Value)
 
 
-let runMatrixParserForRangeWithStreamsAsResult (range : ExcelRangeBase) (p : MatrixParser<_>) =
-    let address = 
-        ParsingAddress.OfRange range
 
-    let ranges = 
-        ExcelRangeBase.asRangeList range
-        |> List.map SingletonExcelRangeBaseUnion.Office
-
-
-    let mses = runMatrixParserForRangesWithStreamsAsResult address ranges p
-    mses
-
-let runMatrixParserForRangeWithStreamsAsResultUnion (range : ExcelRangeUnion) (p : MatrixParser<_>) =
+let runMatrixParserForRangeWithStreamsAsResult_Union (range : ExcelRangeUnion) (p : MatrixParser<_>) =
     let address = 
         ParsingAddress.OfRange range
 
@@ -1640,26 +1630,22 @@ let runMatrixParserForRangeWithStreamsAsResultUnion (range : ExcelRangeUnion) (p
     let mses = runMatrixParserForRangesWithStreamsAsResult address ranges p
     mses
 
+
+let runMatrixParserForRangeWithStreamsAsResult (range : ExcelRangeBase) (p : MatrixParser<_>) =
+    runMatrixParserForRangeWithStreamsAsResult_Union (ExcelRangeUnion.Office range) p
+
+let runMatrixParserForRangeWithStreamsAsResult2_Union (logger: Logger) (range : ExcelRangeUnion) (p : MatrixParser<_>) =
+    let address = 
+        ParsingAddress.OfRange range
+
+    let ranges = 
+        ExcelRangeUnion.asRangeList range
+
+    runMatrixParserForRangesWithStreamsAsResult_Common address logger ranges p
+
+
 let runMatrixParserForRangeWithStreamsAsResult2 (logger: Logger) (range : ExcelRangeBase) (p : MatrixParser<_>) =
-    let address = 
-        ParsingAddress.OfRange range
-
-    let ranges = 
-        ExcelRangeBase.asRangeList range
-        |> List.map SingletonExcelRangeBaseUnion.Office
-
-    runMatrixParserForRangesWithStreamsAsResult_Common address logger ranges p
-
-/// Including Empty Ranges
-let runMatrixParserForRangeWithStreamsAsResult2_All (logger: Logger) (range : ExcelRangeBase) (p : MatrixParser<_>) =
-    let address = 
-        ParsingAddress.OfRange range
-
-    let ranges = 
-        ExcelRangeBase.asRangeList_All range
-        |> List.map SingletonExcelRangeBaseUnion.Office
-
-    runMatrixParserForRangesWithStreamsAsResult_Common address logger ranges p
+    runMatrixParserForRangeWithStreamsAsResult2_Union logger (ExcelRangeUnion.Office range) p
 
 /// Including Empty Ranges
 let runMatrixParserForRangeWithStreamsAsResult2_All_Union (logger: Logger) (range : ExcelRangeUnion) (p : MatrixParser<_>) =
@@ -1671,18 +1657,39 @@ let runMatrixParserForRangeWithStreamsAsResult2_All_Union (logger: Logger) (rang
 
     runMatrixParserForRangesWithStreamsAsResult_Common address logger ranges p
 
+/// Including Empty Ranges
+let runMatrixParserForRangeWithStreamsAsResult2_All (logger: Logger) (range : ExcelRangeBase) (p : MatrixParser<_>) =
+    runMatrixParserForRangeWithStreamsAsResult2_All_Union logger (ExcelRangeUnion.Office range) p
+
+let runMatrixParserForRange2_Union logger (range : ExcelRangeUnion) (p : MatrixParser<_>) =
+    runMatrixParserForRangeWithStreamsAsResult2_Union logger range p
+    |> List.map (fun m -> m.Result.Value)
+
 let runMatrixParserForRange2 logger (range : ExcelRangeBase) (p : MatrixParser<_>) =
     runMatrixParserForRangeWithStreamsAsResult2 logger range p
     |> List.map (fun m -> m.Result.Value)
 
+/// Including Empty Ranges
+let runMatrixParserForRange2_All_Union logger (range : ExcelRangeUnion) (p : MatrixParser<_>) =
+    runMatrixParserForRangeWithStreamsAsResult2_All_Union logger range p
+    |> List.map (fun m -> m.Result.Value)
 
 /// Including Empty Ranges
 let runMatrixParserForRange2_All logger (range : ExcelRangeBase) (p : MatrixParser<_>) =
     runMatrixParserForRangeWithStreamsAsResult2_All logger range p
     |> List.map (fun m -> m.Result.Value)
 
+let runMatrixParserForRange_Union (range : ExcelRangeUnion) (p : MatrixParser<_>) =
+    runMatrixParserForRangeWithStreamsAsResult_Union range p
+    |> List.map (fun m -> m.Result.Value)
+
 let runMatrixParserForRange (range : ExcelRangeBase) (p : MatrixParser<_>) =
     runMatrixParserForRangeWithStreamsAsResult range p
+    |> List.map (fun m -> m.Result.Value)
+
+let runMatrixParserForRangeWithoutRedundent_Union (range : ExcelRangeUnion) (p : MatrixParser<_>) =
+    runMatrixParserForRangeWithStreamsAsResult_Union range p
+    |> OutputMatrixStream.removeRedundants
     |> List.map (fun m -> m.Result.Value)
 
 let runMatrixParserForRangeWithoutRedundent (range : ExcelRangeBase) (p : MatrixParser<_>) =

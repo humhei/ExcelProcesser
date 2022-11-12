@@ -6,6 +6,7 @@ open System.Diagnostics
 
 #nowarn "0104"
 open FParsec
+open CellScript.Core.Extensions
 open System.Collections.Generic
 open NLog
 open OfficeOpenXml
@@ -52,7 +53,7 @@ type VirtualExcelRange =
     { ExcelAddress: ComparableExcelAddress 
       RootData: ConvertibleUnion [,]  }
 with 
-    static member internal OfData(data: ConvertibleUnion [,]) =
+    static member OfData(data: ConvertibleUnion [,]) =
         { ExcelAddress =
             { StartRow    = 1
               StartColumn = 1
@@ -63,6 +64,18 @@ with
         }
 
     member x.AsCellRanges() =
+        x.ExcelAddress.AsCellAddresses()
+        |> List.map(fun addr ->
+            { ExcelCellAddress = addr 
+              RootData = x.RootData  }
+        )
+        |> List.filter(fun m -> 
+            match m.Value with 
+            | ConvertibleUnion.Missing _ -> false
+            | _ -> true
+        )
+
+    member x.AsCellRanges_All() =
         x.ExcelAddress.AsCellAddresses()
         |> List.map(fun addr ->
             { ExcelCellAddress = addr 
@@ -345,9 +358,16 @@ module ExcelRangeUnion =
     let asRangeList (range: ExcelRangeUnion) =
         match range with 
         | ExcelRangeUnion.Office v -> 
+            #if TestVirtual
+            let datas = v.ReadDatas()
+            datas
+            |> VirtualExcelRange.OfData
+            |> fun m -> m.AsCellRanges()
+            |> List.map SingletonExcelRangeBaseUnion.Virtual
+            #else
             ExcelRangeBase.asRangeList v
             |> List.map SingletonExcelRangeBaseUnion.Office
-
+            #endif
         | ExcelRangeUnion.Virtual v ->
             v.AsCellRanges()
             |> List.filter(fun m -> 
@@ -361,8 +381,17 @@ module ExcelRangeUnion =
     let asRangeList_All (range: ExcelRangeUnion) =
         match range with 
         | ExcelRangeUnion.Office v -> 
+            #if TestVirtual
+            let datas = v.ReadDatas()
+            datas
+            |> VirtualExcelRange.OfData
+            |> fun m -> m.AsCellRanges_All()
+            |> List.map SingletonExcelRangeBaseUnion.Virtual
+            #else
             ExcelRangeBase.asRangeList_All v
             |> List.map SingletonExcelRangeBaseUnion.Office
+            #endif
+
         | ExcelRangeUnion.Virtual v ->
             v.AsCellRanges()
             |> List.map SingletonExcelRangeBaseUnion.Virtual
