@@ -28,7 +28,7 @@ module  _RangeInHeader =
     
                     [<RequireQualifiedAccess>]
                     type GroupingColumnHeaderRowName =
-                        | Left of SingletonExcelRangeBase * string
+                        | Left of SingletonExcelRangeBaseUnion * string
                         | Top of string
                     with 
                         member x.Value =
@@ -39,7 +39,7 @@ module  _RangeInHeader =
     
                     type GroupingColumnHeaderRow<'groupingHeader> =
                         { Name: GroupingColumnHeaderRowName option
-                          Values: al1List<SingletonExcelRangeBase * 'groupingHeader> }
+                          Values: al1List<SingletonExcelRangeBaseUnion * 'groupingHeader> }
     
     
                     type GroupingColumnHeaderRows<'groupingHeader>
@@ -106,7 +106,7 @@ module  _RangeInHeader =
 
                     type GroupingColumnHeaderRows =
     
-                        static member private Parser_Common(groupingHeaders: MatrixParser<list<SingletonExcelRangeBase * 'groupingHeader>>, headerName: GroupingColumnHeaderRowNameParser, rowsCount: int) =
+                        static member private Parser_Common(groupingHeaders: MatrixParser<list<SingletonExcelRangeBaseUnion * 'groupingHeader>>, headerName: GroupingColumnHeaderRowNameParser, rowsCount: int) =
                             let groupingHeaders =
                                 groupingHeaders
                                 |> atLeastOne
@@ -132,7 +132,7 @@ module  _RangeInHeader =
                                                 |> OutputMatrixStream.mapResultValue(fun groupingHeaders ->
                                                     let nameCellOfArea area =
                                                         let exactlyOneAreaText =
-                                                            ExcelRangeBase.asRangeList area
+                                                            ExcelRangeUnion.asRangeList area
                                                             |> List.filter(fun m -> m.Text.Trim() <> "")
                                                             |> List.tryExactlyOne
     
@@ -232,7 +232,7 @@ module  _RangeInHeader =
                             |> MatrixParser.collectOutputStream(fun outputStream ->
                                 let rerangedResult = OutputMatrixStream.reRangeRowTo rowsCount outputStream
                 
-                                runMatrixParserForRangeWithStreamsAsResult rerangedResult.Range (groupingHeaderRows)
+                                runMatrixParserForRangeWithStreamsAsResultUnion rerangedResult.Range (groupingHeaderRows)
                                 |> OutputMatrixStream.removeRedundants
                                 |> List.tryExactlyOne
                                 |> function
@@ -294,7 +294,7 @@ module  _RangeInHeader =
             [<AutoOpen>]
             module Table =
                 
-                type GroupingColumnElementLists<'groupingElement>(elementLists: (SingletonExcelRangeBase * 'groupingElement) option al1List al1List) =
+                type GroupingColumnElementLists<'groupingElement>(elementLists: (SingletonExcelRangeBaseUnion * 'groupingElement) option al1List al1List) =
                     member x.ElementLists = elementLists
 
                     member x.AsList = x.ElementLists.AsList
@@ -340,7 +340,7 @@ module  _RangeInHeader =
                     { NormalColumns: NormalColumns
                       GroupingColumn: GroupingColumn<'groupingHeader, 'groupingElement> }
 
-                type PivotTableParser<'groupingHeader, 'groupingElement> internal (headers: PivotTableHeadersParser<'groupingHeader>, elements: MatrixParser<list<(SingletonExcelRangeBase * 'groupingElement) option>>) =
+                type PivotTableParser<'groupingHeader, 'groupingElement> internal (headers: PivotTableHeadersParser<'groupingHeader>, elements: MatrixParser<list<(SingletonExcelRangeBaseUnion * 'groupingElement) option>>) =
                     let elementLists =
                         headers.Value
                         |> MatrixParser.mapOutputStream(fun outputStream ->

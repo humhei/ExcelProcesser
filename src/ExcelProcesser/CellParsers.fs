@@ -10,10 +10,10 @@ open Extensions
 
 
 
-type CellParser = SingletonExcelRangeBase -> bool
+type CellParser = SingletonExcelRangeBaseUnion -> bool
 
 let pBkColor (color : Color) : CellParser =
-    fun (cell : SingletonExcelRangeBase) ->
+    fun (cell : SingletonExcelRangeBaseUnion) ->
         let toHex (color : Color) =
             sprintf "#%02X%02X%02X%02X" color.A color.R color.G color.B
         let bkColor = cell.Style.Fill.BackgroundColor |> ExcelColor.hex
@@ -21,14 +21,14 @@ let pBkColor (color : Color) : CellParser =
         bkColor = targetColor
 
 let pFontColor (color : Color) : CellParser =
-    fun (cell : SingletonExcelRangeBase) ->
+    fun (cell : SingletonExcelRangeBaseUnion) ->
         let toHex (color : Color) =
             sprintf "#%02X%02X%02X%02X" color.A color.R color.G color.B
         let fontColor = cell.Style.Font.Color |> ExcelColor.hex
         let targetColor = toHex color
         fontColor = targetColor
 
-let pTextf (f : string -> bool) = fun (cell : SingletonExcelRangeBase) -> f cell.Text
+let pTextf (f : string -> bool) = fun (cell : SingletonExcelRangeBaseUnion) -> f cell.Text
 
 let pTextContain text = pTextf (fun cellText -> cellText.Contains text)
 
@@ -39,7 +39,7 @@ let pTextContainCI (text: string) = pTextf (fun cellText ->
 let pText text = pTextf (fun cellText -> cellText = text)
 
 let pStyleName (styleName : string) : CellParser =
-    fun (cell : SingletonExcelRangeBase) -> cell.StyleName = styleName
+    fun (cell : SingletonExcelRangeBaseUnion) -> cell.StyleName = styleName
 
 let pRegex pattern : CellParser =
     pTextf (fun text ->
@@ -47,14 +47,14 @@ let pRegex pattern : CellParser =
         m.Success)
 
 let pFormula (firstFormula : Formula) =
-    fun (cell : SingletonExcelRangeBase) ->
+    fun (cell : SingletonExcelRangeBaseUnion) ->
         let formula = cell.Formula
         //if cell.Address = "B13" then printf ""
         formula.StartsWith(Enum.GetName(typeof<Formula>, firstFormula) + "(")
 
 
 let pFParsec (p : Parser<_, _>) =
-    fun (cell : SingletonExcelRangeBase) ->
+    fun (cell : SingletonExcelRangeBaseUnion) ->
         let text = cell.Text
         match run p text with
         | ParserResult.Success (result, _, _) -> Some result
@@ -65,9 +65,9 @@ let pSpace range = pTextf isTrimmedTextEmpty range
 
 let pAny : CellParser = fun _ -> true
 
-let pMerge = fun (range: SingletonExcelRangeBase) -> range.Merge
+let pMerge = fun (range: SingletonExcelRangeBaseUnion) -> range.Merge
 
-let pMergeStarter = fun (range: SingletonExcelRangeBase) -> 
+let pMergeStarter = fun (range: SingletonExcelRangeBaseUnion) -> 
     match range.TryGetMergedRangeAddress() with 
     | Some addr ->
         addr.Start = range.ExcelCellAddress

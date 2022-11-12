@@ -1,11 +1,13 @@
 ﻿// Learn more about F# at http://fsharp.org
 
 namespace ExcelProcesser
+open CellScript.Core
 
 open OfficeOpenXml
 open OfficeOpenXml.Style
 open Shrimp.FSharp.Plus
 open System.Diagnostics
+
 
 type LoggerLevel = 
     | Info = 0
@@ -15,87 +17,14 @@ type LoggerLevel =
 
 
 
-[<DebuggerDisplay("{ExcelCellAddress}")>]
-type ComparableExcelCellAddress =
-    { Row: int 
-      Column: int }
-with 
-    static member OfExcelCellAddress(address: ExcelCellAddress) =
-        { Row = address.Row 
-          Column = address.Column }
 
-    static member OfAddress(address: string) =
-        ComparableExcelCellAddress.OfExcelCellAddress(ExcelCellAddress(address))
+[<AutoOpen>]
+module AutoOpen_Extensions =
+    [<RequireQualifiedAccess>]
+    module String =
+        let contains pattern (text: string) =
+            text.Contains pattern
 
-    member x.ExcelCellAddress =
-        ExcelCellAddress(x.Row, x.Column)
-
-    member x.Address = x.ExcelCellAddress.Address
-
-[<DebuggerDisplay("{ExcelAddress}")>]
-type ComparableExcelAddress =
-    { StartRow: int 
-      EndRow: int
-      StartColumn: int 
-      EndColumn: int 
-      }
-with 
-    member x.Start: ComparableExcelCellAddress =
-        { Row = x.StartRow 
-          Column = x.StartColumn }
-
-    member x.End: ComparableExcelCellAddress =
-        { Row = x.EndRow
-          Column = x.EndColumn }
-
-    member x.Rows = x.EndRow - x.StartRow + 1
-
-    member x.Columns = x.EndColumn - x.StartColumn + 1
-
-    static member OfAddress(excelAddress: ExcelAddress) =
-        let startCell = excelAddress.Start
-
-        let endCell = excelAddress.End
-        {
-            StartRow = startCell.Row
-            EndRow = endCell.Row
-            StartColumn = startCell.Column
-            EndColumn = endCell.Column
-        }
-
-    static member OfAddress(address: string) =
-        ComparableExcelAddress.OfAddress(ExcelAddress(address))
-
-    static member OfRange(range: ExcelRangeBase) =
-        let startCell = range.Start
-
-        let endCell = range.End
-        {
-            StartRow = startCell.Row
-            EndRow = endCell.Row
-            StartColumn = startCell.Column
-            EndColumn = endCell.Column
-        }
-
-
-
-    member x.ExcelAddress =
-        ExcelAddress(x.StartRow, x.StartColumn, x.EndRow, x.EndColumn)
-    
-    member x.Address = x.ExcelAddress.Address
-
-    member x.Contains(y: ComparableExcelAddress) = 
-        match x.Start.Column, x.Start.Row, x.End.Column, x.End.Row with 
-        | SmallerOrEqual y.Start.Column, SmallerOrEqual y.Start.Row, BiggerOrEqual y.End.Column, BiggerOrEqual y.End.Row ->
-            true
-        | _ -> false
-
-    member x.IsIncludedIn(y: ComparableExcelAddress) = y.Contains(x)
-
-
-type ComparableExcelCellAddress with 
-    member x.RangeTo(y: ComparableExcelCellAddress) =
-        x.Address + ":" + y.Address
 
 [<DebuggerDisplay("{Address} {Text}")>]
 [<StructuredFormatDisplay("{Address} {Text}")>]
@@ -135,7 +64,7 @@ type SingletonExcelRangeBase private (range: ExcelRangeBase) =
 
     member x.RangeTo(targetRange: SingletonExcelRangeBase) =
         let addr = x.ExcelCellAddress.RangeTo(targetRange.ExcelCellAddress)
-        range.Worksheet.Cells.[addr]
+        range.Worksheet.Cells.[addr] :> ExcelRangeBase
 
     member x.Merge = range.Merge
     
@@ -165,7 +94,7 @@ type SingletonExcelRangeBase private (range: ExcelRangeBase) =
     static member Create (excelRangeBase: ExcelRangeBase) =
         match excelRangeBase.Columns, excelRangeBase.Rows with 
         | 1, 1 -> SingletonExcelRangeBase excelRangeBase
-        | _ -> failwithf "Cannot create SingletonExcelRangeBase when columns is %d and rows is %d" excelRangeBase.Columns excelRangeBase.Rows
+        | _ -> failwithf "Cannot create SingletonExcelRangeBaseUnion when columns is %d and rows is %d" excelRangeBase.Columns excelRangeBase.Rows
 
 
 
@@ -184,12 +113,8 @@ module SingletonExcelRangeBase =
     let tryGetMergedRangeAddress(range: SingletonExcelRangeBase) =
         range.TryGetMergedRangeAddress()
 
-[<AutoOpen>]
-module AutoOpen_Extensions =
-    [<RequireQualifiedAccess>]
-    module String =
-        let contains pattern (text: string) =
-            text.Contains pattern
+
+
 
 module Extensions =
 

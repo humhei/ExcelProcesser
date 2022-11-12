@@ -276,8 +276,8 @@ type Shift with
 
     
 [<RequireQualifiedAccess>]
-module internal SingletonExcelRangeBase =
-    let rec offset(shift: Shift) (range: SingletonExcelRangeBase) =
+module internal SingletonExcelRangeBaseUnion =
+    let rec offset(shift: Shift) (range: SingletonExcelRangeBaseUnion) =
         match shift with 
         | Start -> range
 
@@ -310,8 +310,12 @@ with
 
     member x.EndColumn = x.Value.EndColumn
 
+    static member OfRange(range: ExcelRangeUnion) =
+        range.ComparableExcelAddress()
+        |> ParsingAddress
+
     static member OfRange(range: ExcelRangeBase) =
-        ComparableExcelAddress.OfRange(range)
+        ComparableExcelAddress.OfRange range
         |> ParsingAddress
 
     member x.ExcelAddress = x.Value.ExcelAddress
@@ -321,16 +325,16 @@ with
     member x.ComparableExcelAddress = x.Value
 
 
-[<DebuggerDisplay("{Range.Value.Address}")>]
+[<DebuggerDisplay("{Range.Address} {Range.Text}")>]
+[<StructuredFormatDisplay("{Range.Address} {Range.Text}")>]
 type InputMatrixStream = 
-    { Range: SingletonExcelRangeBase
+    { Range: SingletonExcelRangeBaseUnion
       Shift: Shift
       ParsingAddress: ParsingAddress
       Logger: Logger }
 with 
     member internal stream.OffsetedRange =
-        SingletonExcelRangeBase.offset stream.Shift stream.Range
-    
+        SingletonExcelRangeBaseUnion.offset stream.Shift stream.Range
 
     member private x.LastCellShift = x.Shift.Last
 
@@ -341,7 +345,7 @@ type OutputMatrixStreamResult<'result> =
     { IsSkip: bool
       Value: 'result }
 
-type RangeTransformer(range: ExcelRangeBase) =
+type RangeTransformer(range: ExcelRangeUnion) =
     
     member x.Range = range
 
@@ -362,15 +366,15 @@ type RangeTransformer(range: ExcelRangeBase) =
         )
 
     member x.SetStart(start: ComparableExcelCellAddress) =
-        let endAddr = ComparableExcelCellAddress.OfExcelCellAddress x.Range.End
+        let endAddr = x.Range.End
         let addr = start.RangeTo(endAddr)
-        x.Range.Worksheet.Cells.[addr]
+        x.Range.Rerange(addr)
         |> RangeTransformer
 
     member x.SetEnd(endAddr: ComparableExcelCellAddress) =
-        let start = ComparableExcelCellAddress.OfExcelCellAddress x.Range.Start
+        let start = x.Range.Start
         let addr = start.RangeTo(endAddr)
-        x.Range.Worksheet.Cells.[addr]
+        x.Range.Rerange(addr)
         |> RangeTransformer
 
     member x.SetEndRow(endRow: int) =
@@ -404,7 +408,7 @@ type RangeTransformer(range: ExcelRangeBase) =
         x.SetStart(start)
 
 
-    member x.RightOf(targetRange: SingletonExcelRangeBase) =
+    member x.RightOf(targetRange: SingletonExcelRangeBaseUnion) =
         let addr = 
             ExcelAddress(
                 fromCol = targetRange.Column + 1,
@@ -413,7 +417,7 @@ type RangeTransformer(range: ExcelRangeBase) =
                 toRow = x.Range.End.Row
             )
 
-        let newRange = x.Range.Worksheet.Cells.[addr.Address]
+        let newRange = x.Range.Rerange(addr.Address)
         
         RangeTransformer(
             range = newRange
@@ -427,7 +431,7 @@ type RangeTransformer(range: ExcelRangeBase) =
         RangeTransformer(newRange)
 
 type OutputMatrixStream<'result> =
-    { Range: SingletonExcelRangeBase
+    { Range: SingletonExcelRangeBaseUnion
       Shift: Shift
       Logger: Logger
       ParsingAddress: ParsingAddress
@@ -436,7 +440,7 @@ type OutputMatrixStream<'result> =
 with 
 
     member stream.OffsetedRange =
-        SingletonExcelRangeBase.offset stream.Shift stream.Range
+        SingletonExcelRangeBaseUnion.offset stream.Shift stream.Range
     
 
     member stream.RangeToOffsetedRange_AllShifts =
@@ -544,17 +548,17 @@ module OutputMatrixStream =
 
     let reRangeToEnd (stream: OutputMatrixStream<_>) = 
         let addr = stream.Range.Address + ":" + stream.ParsingAddress.ComparableExcelAddress.End.Address
-        let reranged = stream.Range.Worksheet.Cells.[addr]
+        let reranged = stream.Range.Rerange(addr)
         RangeTransformer(reranged)
 
-    let reRangeTo (targetRange: SingletonExcelRangeBase) (stream: OutputMatrixStream<_>) = 
+    let reRangeTo (targetRange: SingletonExcelRangeBaseUnion) (stream: OutputMatrixStream<_>) = 
         let addr = stream.Range.Address + ":" + targetRange.Address
-        let reranged = stream.Range.Worksheet.Cells.[addr]
+        let reranged = stream.Range.Rerange(addr)
         RangeTransformer(reranged)
 
-    let reRangeToAsOutputStream (targetRange: SingletonExcelRangeBase) (stream: OutputMatrixStream<_>) = 
+    let reRangeToAsOutputStream (targetRange: SingletonExcelRangeBaseUnion) (stream: OutputMatrixStream<_>) = 
         let addr = stream.Range.Address + ":" + targetRange.Address
-        let reranged = stream.Range.Worksheet.Cells.[addr]
+        let reranged = stream.Range.Rerange(addr)
         { 
             stream.ShiftBy(reranged.Columns-1, reranged.Rows-1) with 
                 ParsingAddress = ParsingAddress.OfRange reranged }
@@ -570,7 +574,7 @@ module OutputMatrixStream =
                     fromRow = stream.ParsingAddress.StartRow,
                     toRow = stream.Range.Row - 1)
 
-            let reranged = stream.Range.Worksheet.Cells.[addr.Address]
+            let reranged = stream.Range.Rerange(addr.Address)
             (reranged)
             |> Some
 
@@ -587,7 +591,7 @@ module OutputMatrixStream =
                     fromRow = stream.Range.Row,
                     toRow = stream.OffsetedRange.Row )
 
-            let reranged = stream.Range.Worksheet.Cells.[addr.Address]
+            let reranged = stream.Range.Rerange(addr.Address)
             (reranged)
             |> Some
 
@@ -682,7 +686,7 @@ type MatrixParser<'result>(invoke: InputMatrixStream -> OutputMatrixStream<'resu
 
             let range = 
                 reranged.Offset(0, 0, 1, 1)
-                |> SingletonExcelRangeBase.Create
+                |> SingletonExcelRangeBaseUnion.Create
 
             { outputStream.AsInputStream with 
                 Range = range 
@@ -797,7 +801,7 @@ module MatrixParser =
             let (outputStreams: OutputMatrixStream<'result> list) = p inputStream
             List.filter (fun outputStream -> f outputStream.Result.Value) outputStreams
 
-let private mxCellParserOp_common (cellParser: InputMatrixStream -> SingletonExcelRangeBase -> 'result option) =
+let private mxCellParserOp_common (cellParser: InputMatrixStream -> SingletonExcelRangeBaseUnion -> 'result option) =
     fun (stream: InputMatrixStream) ->
         let offsetedRange = stream.OffsetedRange
         let addr = offsetedRange.ExcelCellAddress
@@ -820,9 +824,9 @@ let private mxCellParserOp_common (cellParser: InputMatrixStream -> SingletonExc
         | _ -> None
     |> SingletonMatrixParser
 
-let mxCellParserOp (cellParser: SingletonExcelRangeBase -> 'result option) =
+let mxCellParserOp (cellParser: SingletonExcelRangeBaseUnion -> 'result option) =
     mxCellParserOp_common(fun _ range -> cellParser range)
-//let mxCellParser_Result (cellParser: SingletonExcelRangeBase -> Result<'ok, string>) =
+//let mxCellParser_Result (cellParser: SingletonExcelRangeBaseUnion -> Result<'ok, string>) =
 //    mxCellParserOp (fun range ->
 //        match cellParser range with 
 //        | Result.Ok v -> Some v
@@ -842,12 +846,12 @@ let mxFParsec p =
 
 
 let mxFParsecInt32 = mxFParsec (pint32) 
-
+ 
 let mxText text =
-    mxCellParser (pText text) SingletonExcelRangeBase.getText
+    mxCellParser (pText text) SingletonExcelRangeBaseUnion.getText
 
 let mxTextf f =
-    mxCellParser (pTextf f) SingletonExcelRangeBase.getText
+    mxCellParser (pTextf f) SingletonExcelRangeBaseUnion.getText
 
 let mxNonEmpty = 
     mxTextf isTrimmedTextNotEmpty
@@ -863,19 +867,22 @@ let mxRegex pattern =
         match text with 
         | ParseRegex.Head pattern _ -> true
         | _ -> false
-    )) SingletonExcelRangeBase.getText
+    )) SingletonExcelRangeBaseUnion.getText
 
 let mxWord = mxRegex "\w" 
 
 let mxSpace = mxCellParser pSpace ignore 
 
-let mxStyleName styleName = mxCellParser (pStyleName styleName) SingletonExcelRangeBase.getText
+let mxEmpty = mxSpace
+
+
+let mxStyleName styleName = mxCellParser (pStyleName styleName) SingletonExcelRangeBaseUnion.getText
 
 let mxAnySkip = 
     mxCellParser pAny ignore 
 
 let mxAnyOrigin = 
-    mxCellParser pAny SingletonExcelRangeBase.getText 
+    mxCellParser pAny SingletonExcelRangeBaseUnion.getText 
 
 let mxAddress address = 
     let targetAddress = new ExcelAddress(address)
@@ -886,7 +893,7 @@ let mxAddress address =
     )
 
 let mxAnyOriginObj = 
-    mxCellParser pAny SingletonExcelRangeBase.getValue 
+    mxCellParser pAny SingletonExcelRangeBaseUnion.getValue 
 
 
 //let (||>>) p f = 
@@ -1182,6 +1189,45 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
                 }
         )
 
+let mxMany_all_ForRowOrColumn direction p =
+    fun (inputStream: InputMatrixStream) ->
+        let maxCount = 
+            match direction with 
+            | Direction.Horizontal -> 
+                let cols = 
+                    inputStream.Shift
+                    |> Shift.horizontalOffsets 
+
+                (List.max cols) + 1
+            
+            | Direction.Vertical ->
+                let rows = 
+                    inputStream.Shift
+                    |> Shift.verticalOffsets
+
+                (List.max rows) + 1
+
+        let r  = (mxManyWithMaxCount direction (Some maxCount) p).Invoke inputStream
+        match r with 
+        | [r] ->
+            match r.Result.IsSkip with 
+            | true -> []
+            | false ->
+                match r.Result.Value.Length with 
+                | EqualTo maxCount -> [r]
+                | _ -> []
+
+        | _ -> failwith "Not implemented"
+        //r
+        //|> List.collect(fun r ->
+        //    match r.Result.IsSkip with 
+        //    | true -> []
+        //    | false ->
+        //        match r.Result.Value.Length with 
+        //        | EqualTo maxCount -> [r]
+        //        | _ -> []
+        //)
+    |> MatrixParser
 
 let mxMany1WithMaxCount direction (maxCount: int option) (p: MatrixParser<'result>) =
     mxManyWithMaxCount direction maxCount p
@@ -1397,9 +1443,9 @@ let mxMergeStarter =
 
 let mxMergeWithAddresses direction =
     pipe2Relatively direction mxMergeStarter (fun outputStream ->
-        let workSheet = outputStream.Range.Worksheet
-        let mergeCellId = SingletonExcelRangeBase.Create(workSheet.Cells.[outputStream.Result.Value.Address]).GetMergeCellId()
-        mxMany1 direction (mxCellParser (fun range -> range.GetMergeCellId() = mergeCellId) SingletonExcelRangeBase.getExcelCellAddress)
+        let workSheet = outputStream.Range.WorksheetOrFail
+        let mergeCellId = SingletonExcelRangeBaseUnion.Create(workSheet.Cells.[outputStream.Result.Value.Address]).GetMergeCellId()
+        mxMany1 direction (mxCellParser (fun range -> range.GetMergeCellId() = mergeCellId) SingletonExcelRangeBaseUnion.getExcelCellAddress)
     ) id
 
 let mxMerge direction =
@@ -1442,6 +1488,22 @@ let mxRowMany1Op maxSkipCount p = mxMany1Op Direction.Vertical maxSkipCount p
 let mxRowMany p = mxMany Direction.Vertical p
 let mxRowMany1 p = mxMany1 Direction.Vertical p
 let mxRowMany1WithMaxCount maxCount p = mxMany1WithMaxCount Direction.Vertical maxCount p
+
+let mxEmptyRow: MatrixParser<_> =
+    mxMany_all_ForRowOrColumn Direction.Horizontal mxEmpty
+  
+
+let mxEntityRow: MatrixParser<_> =
+    MatrixParser(
+        fun inputStream ->
+            let r = mxEmptyRow.Invoke inputStream
+            match r with 
+            | [] -> 
+                (mxMany_all_ForRowOrColumn Direction.Horizontal mxAnyOrigin).Invoke inputStream
+            | _ -> []
+    )
+
+
 
 let c2 p1 p2 =
     pipe2 Direction.Horizontal p1 p2 id
@@ -1526,7 +1588,7 @@ let r8 p1 p2 p3 p4 p5 p6 p7 p8 =
         a, b, c, d, e, f, g, h
     )
 
-let private runMatrixParserForRangesWithStreamsAsResult_Common addr logger (ranges : seq<SingletonExcelRangeBase>) (p : MatrixParser<_>) =
+let private runMatrixParserForRangesWithStreamsAsResult_Common addr logger (ranges : seq<SingletonExcelRangeBaseUnion>) (p : MatrixParser<_>) =
     let ranges =
         ranges 
         |> List.ofSeq
@@ -1541,15 +1603,16 @@ let private runMatrixParserForRangesWithStreamsAsResult_Common addr logger (rang
               ParsingAddress = addr
               }
         )
+    let r = 
+        inputStreams 
+        |> List.collect p.Invoke
 
-    inputStreams 
-    |> List.collect p.Invoke
+    r
 
-
-let private runMatrixParserForRangesWithStreamsAsResult addr (ranges : seq<SingletonExcelRangeBase>) (p : MatrixParser<_>) =
+let private runMatrixParserForRangesWithStreamsAsResult addr (ranges : seq<SingletonExcelRangeBaseUnion>) (p : MatrixParser<_>) =
     runMatrixParserForRangesWithStreamsAsResult_Common addr (new Logger()) ranges p
 
-let private runMatrixParserForRanges addr (ranges : seq<SingletonExcelRangeBase>) (p : MatrixParser<_>) =
+let private runMatrixParserForRanges addr (ranges : seq<SingletonExcelRangeBaseUnion>) (p : MatrixParser<_>) =
 
     let mses = runMatrixParserForRangesWithStreamsAsResult addr ranges p
     mses |> List.map (fun ms -> ms.Result.Value)
@@ -1561,6 +1624,17 @@ let runMatrixParserForRangeWithStreamsAsResult (range : ExcelRangeBase) (p : Mat
 
     let ranges = 
         ExcelRangeBase.asRangeList range
+        |> List.map SingletonExcelRangeBaseUnion.Office
+    let mses = runMatrixParserForRangesWithStreamsAsResult address ranges p
+    mses
+
+let runMatrixParserForRangeWithStreamsAsResultUnion (range : ExcelRangeUnion) (p : MatrixParser<_>) =
+    let address = 
+        ParsingAddress.OfRange range
+
+    let ranges = 
+        ExcelRangeUnion.asRangeList range
+
     let mses = runMatrixParserForRangesWithStreamsAsResult address ranges p
     mses
 
@@ -1570,6 +1644,7 @@ let runMatrixParserForRangeWithStreamsAsResult2 (logger: Logger) (range : ExcelR
 
     let ranges = 
         ExcelRangeBase.asRangeList range
+        |> List.map SingletonExcelRangeBaseUnion.Office
 
     runMatrixParserForRangesWithStreamsAsResult_Common address logger ranges p
 
@@ -1580,6 +1655,17 @@ let runMatrixParserForRangeWithStreamsAsResult2_All (logger: Logger) (range : Ex
 
     let ranges = 
         ExcelRangeBase.asRangeList_All range
+        |> List.map SingletonExcelRangeBaseUnion.Office
+
+    runMatrixParserForRangesWithStreamsAsResult_Common address logger ranges p
+
+/// Including Empty Ranges
+let runMatrixParserForRangeWithStreamsAsResult2_All_Union (logger: Logger) (range : ExcelRangeUnion) (p : MatrixParser<_>) =
+    let address = 
+        ParsingAddress.OfRange range
+
+    let ranges = 
+        ExcelRangeUnion.asRangeList_All range
 
     runMatrixParserForRangesWithStreamsAsResult_Common address logger ranges p
 
@@ -1603,10 +1689,11 @@ let runMatrixParserForRangeWithoutRedundent (range : ExcelRangeBase) (p : Matrix
     |> List.map (fun m -> m.Result.Value)
 
 /// Including Empty Ranges
-let runMatrixParserWithStreamsAsResult (worksheet: ValidExcelWorksheet) (p: MatrixParser<_>) =
+let  private runMatrixParserWithStreamsAsResult_Common (worksheet: ValidExcelWorksheet) logger (p: MatrixParser<_>) =
     let userRange = 
         worksheet.Value
         |> ExcelWorksheet.getUserRangeList
+        |> List.map SingletonExcelRangeBaseUnion.Office
 
     let addr =
         { 
@@ -1617,19 +1704,22 @@ let runMatrixParserWithStreamsAsResult (worksheet: ValidExcelWorksheet) (p: Matr
         }
         |> ParsingAddress
 
-    runMatrixParserForRangesWithStreamsAsResult addr userRange p
-
+    let r = runMatrixParserForRangesWithStreamsAsResult_Common addr logger userRange p
+    r
 
 let runMatrixParser (worksheet: ValidExcelWorksheet) (p: MatrixParser<_>) =
-    runMatrixParserWithStreamsAsResult worksheet p
+    runMatrixParserWithStreamsAsResult_Common worksheet (new Logger()) p
     |> List.map (fun m -> m.Result.Value)
 
+let runMatrixParserWithStreamsAsResult (worksheet: ValidExcelWorksheet) (p: MatrixParser<'result>) = 
+    runMatrixParserWithStreamsAsResult_Common worksheet (new Logger()) p
+    
 
 let runMatrixParserWithStreamsAsResultSafe (worksheet: ValidExcelWorksheet) (p: MatrixParser<'result>) =
 
     let logger = new Logger()
 
-    match runMatrixParserWithStreamsAsResult worksheet p with 
+    match runMatrixParserWithStreamsAsResult_Common worksheet (logger) p with 
     | [] -> 
         match logger.Messages().IsEmpty with 
         | true -> failwithf "SheetName: %s\n ParsingTarget: %s\nAll named parsed are parsed failured %A\nStackTrace:\n%s" worksheet.Name (typeof<'result>.Name) p System.Environment.StackTrace 

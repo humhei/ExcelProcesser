@@ -2,6 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net462</TargetFrameworks>
+      <Version>99.99.99</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Extensions.fs" />
@@ -14,12 +15,12 @@
     <Compile Include="SematicsParsers\RangeInHeader.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="CellScript.Core" Version="0.1.280"/>
+    <PackageReference Include="CellScript.Core" Version="0.1.315" />
     <PackageReference Include="Deedle" Version="2.1.2" />
     <PackageReference Include="EPPlus" Version="4.5.3.3" />
     <PackageReference Include="FParsec" Version="1.1.1" />
     <PackageReference Include="NLog" Version="4.7.7" />
-    <PackageReference Include="Shrimp.FSharp.Plus" Version="1.1.449"/>
+    <PackageReference Include="Shrimp.FSharp.Plus" Version="1.1.485" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
   </ItemGroup>
 

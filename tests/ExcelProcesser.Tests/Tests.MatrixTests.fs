@@ -59,7 +59,7 @@ let matrixTests =
         | ["mxTextA"] -> pass()
         | _ -> fail()
 
-    ftestCase "mxEOF" <| fun _ -> 
+    testCase "mxEOF" <| fun _ -> 
         let parser =
             c2 (mxText "mxEOF_STRAT") (mxUntil1 Direction.Horizontal None (mxAnyOrigin) (mxEOF))
 
@@ -68,9 +68,12 @@ let matrixTests =
         | ["mxEOF_STRAT", ([""; ""; ""; ""; ""; ""; ""; "mxEOF_R2"; "mxEOF_END"],_)] -> pass()
         | _ -> fail()
 
+
+
     testCase "mxOR" <| fun _ -> 
         let results = runMatrixParser worksheet (mxOR (mxText "mxOR_A") (mxText "mxOR_B"))
         match results with 
+
         | [Choice1Of2 "mxOR_A";Choice2Of2 "mxOR_B"] -> pass()
         | _ -> fail()
 
@@ -339,6 +342,23 @@ let matrixTests =
         | ["cm_skip_1"; "cm_skip_2"; "cm_skip_3"] :: _  -> pass()
         | _ -> fail()
 
+    ptestCase "emptyRow" <| fun _ -> 
+        let parser = 
+            r2
+                (c2 (mxText "mxEmptyRow_Starter") (mxUntilA10 (mxText "mxEmptyRow_End")))
+                (
+                    mxRowMany1Skip (mxEmptyRow) 1 mxEntityRow
+                )
+                
+
+        let results = 
+            runMatrixParserWithStreamsAsResult 
+                worksheet 
+                (parser)
+
+        failwith ""
+        
+
     testCase "column many with skip backtrack" <| fun _ -> 
         let results = 
             runMatrixParserWithStreamsAsResult
@@ -403,8 +423,8 @@ let matrixTests =
                 )
         results 
         |> List.map (OutputMatrixStream.reRangeByShift >> (fun (rerangedResult) -> 
-            let ranges = ExcelRangeBase.asRangeList rerangedResult.Range
-            List.map SingletonExcelRangeBase.getText ranges
+            let ranges = ExcelRangeUnion.asRangeList rerangedResult.Range
+            List.map SingletonExcelRangeBaseUnion.getText ranges
             |> List.distinct
         ))
         |> function
@@ -425,8 +445,8 @@ let matrixTests =
                 )
         results 
         |> List.map (OutputMatrixStream.reRangeByShift  >> (fun (rerangedResult) -> 
-            let ranges = List.ofSeq rerangedResult.Range
-            List.map ExcelRangeBase.getText ranges
+            let ranges = ExcelRangeUnion.asRangeList rerangedResult.Range
+            List.map SingletonExcelRangeBaseUnion.getText ranges
             |> List.distinct
         ))
         |> function

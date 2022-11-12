@@ -3,6 +3,7 @@
 open ExcelProcesser
 open ExcelProcesser.MatrixParsers
 open Shrimp.FSharp.Plus
+open CellScript.Core
 open OfficeOpenXml
 open System.Diagnostics
 open ExcelProcesser.Extensions
@@ -14,11 +15,11 @@ module _Normal =
     module _Headers =
         [<RequireQualifiedAccess>]
         type HeaderTree = 
-            | Node of current: SingletonExcelRangeBase * HeaderTree
-            | Leaf of current: SingletonExcelRangeBase
-            | LeftTailMerged of current: SingletonExcelRangeBase * merged: HeaderTree
-            | BottomEmpty of cureent: SingletonExcelRangeBase * tops: HeaderTree
-            | RightTailMerged of current: SingletonExcelRangeBase * merged: HeaderTree
+            | Node of current: SingletonExcelRangeBaseUnion * HeaderTree
+            | Leaf of current: SingletonExcelRangeBaseUnion
+            | LeftTailMerged of current: SingletonExcelRangeBaseUnion * merged: HeaderTree
+            | BottomEmpty of cureent: SingletonExcelRangeBaseUnion * tops: HeaderTree
+            | RightTailMerged of current: SingletonExcelRangeBaseUnion * merged: HeaderTree
         with 
             member x.Current =
                 match x with 
@@ -46,9 +47,9 @@ module _Normal =
             | None = 2
 
         [<DebuggerDisplay("NormalColumnHeader ({Tree}) ({Tree.FirstValidRange}) ")>]
-        type NormalColumnHeader internal (originRange: SingletonExcelRangeBase, rowsCount: int) =
+        type NormalColumnHeader internal (originRange: SingletonExcelRangeBaseUnion, rowsCount: int) =
             let tree =
-                let rec loop i (range: SingletonExcelRangeBase) = 
+                let rec loop i (range: SingletonExcelRangeBaseUnion) = 
                     match i with 
                     | 1 -> HeaderTree.Leaf range
                     | i when i < 1 -> failwith "Invalid token"
@@ -63,8 +64,8 @@ module _Normal =
                                     MergedTailTag.None, range, (mergedAdress.Rows)
                                 | false -> 
                                     let seedingRange = 
-                                        range.Worksheet.Cells.[mergedAdress.Start.Address]
-                                        |> SingletonExcelRangeBase.Create
+                                        range.WorksheetOrFail.Cells.[mergedAdress.Start.Address]
+                                        |> SingletonExcelRangeBaseUnion.Create
                         
                                     let mergedTailTag =
                                         match mergedAdress.Start.Column = currentRangeAddr.Column with 
@@ -99,7 +100,7 @@ module _Normal =
 
             member x.Tree = tree
 
-            member x.Worksheet = x.Tree.Current.Worksheet
+            member x.WorksheetOrFail = x.Tree.Current.WorksheetOrFail
 
             member x.LastRow = x.Tree.Current.Row
 
@@ -186,7 +187,7 @@ module _Normal =
                                     | Result.Error v -> v
                                 )
                    
-                        runMatrixParserForRangeWithStreamsAsResult2_All outputStream.Logger lastRow parser
+                        runMatrixParserForRangeWithStreamsAsResult2_All_Union outputStream.Logger lastRow parser
                         |> OutputMatrixStream.removeRedundants
                         |> List.map (fun m -> m.Result.Value)
             
@@ -216,7 +217,7 @@ module _Normal =
     [<AutoOpen>]
     module _Content =
         
-        type NormalColumnContents private (ranges: SingletonExcelRangeBase al1List, contents: obj al1List) =
+        type NormalColumnContents private (ranges: SingletonExcelRangeBaseUnion al1List, contents: obj al1List) =
             let isEmpty (v: obj) =
                 match v with 
                 | null -> true
@@ -261,15 +262,15 @@ module _Normal =
 
 
 
-            new (ranges: SingletonExcelRangeBase al1List, ?fillEmpty: bool) =
+            new (ranges: SingletonExcelRangeBaseUnion al1List, ?fillEmpty: bool) =
                 let fillEmpty = defaultArg fillEmpty true 
 
                 let contents_mergedExpanded =
                     ranges.AsList 
                     |> List.map (fun range ->
-                        match SingletonExcelRangeBase.tryGetMergedRangeAddress range with 
+                        match SingletonExcelRangeBaseUnion.tryGetMergedRangeAddress range with 
                         | Some addr -> 
-                            let range = range.Worksheet.Cells.[addr.Start.Address]
+                            let range = range.WorksheetOrFail.Cells.[addr.Start.Address]
                             range.Value
                         | None -> range.Value
                     )
@@ -304,7 +305,7 @@ module _Normal =
     module _Column =    
 
         type NormalColumn(header: NormalColumnHeader, rowIndexes: int al1List) =
-            let worksheet = header.Worksheet
+            let worksheet = header.WorksheetOrFail
             let contents = 
                 let ranges = 
                     let column = header.Tree.Current.Column
@@ -320,7 +321,7 @@ module _Normal =
                     addrs
                     |> List.map (fun addr ->
                         worksheet.Cells.[addr.Address]
-                        |> SingletonExcelRangeBase.Create
+                        |> SingletonExcelRangeBaseUnion.Create
                     )
                     |> AtLeastOneList.Create
 
@@ -335,7 +336,7 @@ module _Normal =
             new (header: NormalColumnHeader, startRowOffset: int, rowsCount: int) =
                 let range = header.Tree.Current.Offset(startRowOffset, 0, rowsCount, 1)
                 let rowIndexes  = 
-                    ExcelRangeBase.asRangeList_All range
+                    ExcelRangeUnion.asRangeList_All range
                     |> List.map (fun m -> m.Row)
                     |> AtLeastOneList.Create
 
