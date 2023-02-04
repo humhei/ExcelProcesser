@@ -6,6 +6,7 @@ open CellScript.Core
 open OfficeOpenXml
 open OfficeOpenXml.Style
 open Shrimp.FSharp.Plus
+open CellScript.Core.Extensions
 open System.Diagnostics
 
 
@@ -160,16 +161,65 @@ module Extensions =
         let internal getMaxRowNumber (worksheet:ExcelWorksheet) =
             worksheet.Dimension.End.Row
 
+        let getUserRangeListWith maximumEmptyColumns (worksheet: ExcelWorksheet) =
+            let maxRow = getMaxRowNumber worksheet
+            let maxCol = getMaxColNumber worksheet
+
+            match maximumEmptyColumns with 
+            | None ->
+                let r = 
+                    [ for row in 1..maxRow do
+                          for col in 1..maxCol do
+                              let content = worksheet.Cells.[row, col]
+                              yield SingletonExcelRangeBase.Create(content :> ExcelRangeBase) ]
+
+                {|MaxCol = maxCol; MaxRow = maxRow; UserRange = r |}
+
+            | Some maximumEmptyColumns ->
+                let rec loop columns (emptyColumns: _ list) colNum =
+                    match emptyColumns.Length with 
+                    | BiggerThan maximumEmptyColumns -> columns
+                    | _ ->
+                        match colNum with 
+                        | BiggerThan maxCol -> columns
+                        | _ ->
+                            let column = 
+                                [1..maxRow]
+                                |> List.map(fun row ->
+                                    let content = worksheet.Cells.[row, colNum]
+                                    SingletonExcelRangeBase.Create(content :> ExcelRangeBase) 
+                                )
+
+                            let isColumnEmpty = 
+                                column
+                                |> List.forall(fun (m: SingletonExcelRangeBase) -> isNull m.Value)
+
+                            match isColumnEmpty with 
+                            | true ->
+                                loop (columns) (column :: emptyColumns) (colNum + 1)
+
+                            | false ->
+                                loop (column :: emptyColumns @ columns) [] (colNum + 1)
+                                
+
+                let r = 
+                    loop [] [] 1
+                    |> List.rev
+
+                let r = 
+                    r
+                    |> array2D
+                    |> Array2D.transpose
+
+                let r2 =
+                    r
+                    |> Array2D.toLists
+                    |> List.concat
+
+                {|MaxCol = Array2D.length2 r; MaxRow = Array2D.length1 r; UserRange = r2 |}
+
         let getUserRangeList (worksheet: ExcelWorksheet) =
-            [ let maxRow = getMaxRowNumber worksheet
-              let maxCol = getMaxColNumber worksheet
-              for i in 1..maxRow do
-                  for j in 1..maxCol do
-                      let content = worksheet.Cells.[i, j]
-                      yield SingletonExcelRangeBase.Create(content :> ExcelRangeBase) ]
-
-
-
+            getUserRangeListWith None worksheet
 
 
     [<RequireQualifiedAccess>]

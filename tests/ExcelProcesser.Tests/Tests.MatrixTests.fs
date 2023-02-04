@@ -134,6 +134,31 @@ let matrixTests =
         | [(("C2_R3A", "C2_R3B", "C2_R3C"),"C2_R3D")] -> pass()
         | _ -> fail()
 
+    testCase "mxUntil not including self" <| fun _ -> 
+        let results = 
+            let starter = mxText "MXUntil_No_Self_1A"
+            runMatrixParserWithStreamsAsResult 
+                worksheet 
+                    (
+                        r2
+                            (c2 (starter) (mxAnyOrigin))
+                            (
+                                mxUntilA 
+                                    (Some 3)
+                                    (mxOR 
+                                        (c2 (starter) (mxAnyOrigin))
+                                        mxEmpty
+                                    )
+                                    
+                            )
+                    )
+                    //(c2 (starter) (mxUntil1NoConfict Direction.Horizontal None starter))
+                
+        pass()
+        //match results with 
+        //| [(("Cross_1B", ("Cross_1C", "Cross_1D")))] -> pass()
+        //| _ -> fail()
+
     testCase "cross area1 - 1" <| fun _ -> 
         let results = 
             runMatrixParser 

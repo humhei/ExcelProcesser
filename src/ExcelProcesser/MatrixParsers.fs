@@ -20,6 +20,13 @@ type Coordinate =
     { X: int 
       Y: int }
 
+
+
+type ExcelProcesserPasingErrorException(message, logger) =
+    inherit System.Exception(message)
+
+    member x.Logger = logger
+
 [<RequireQualifiedAccess>]
 module Coordinate =
     let origin = { X = 0; Y = 0 } 
@@ -893,6 +900,20 @@ let mxAddress address =
         else None
     )
 
+let mxColAddress columnIndex = 
+    mxCellParserOp(fun range ->
+        if range.ExcelCellAddress.Column = columnIndex
+        then Some range.Text
+        else None
+    )
+
+let mxRowAddress rowIndex = 
+    mxCellParserOp(fun range ->
+        if range.ExcelCellAddress.Row = rowIndex
+        then Some range.Text
+        else None
+    )
+
 let mxAnyOriginObj = 
     mxCellParser pAny SingletonExcelRangeBaseUnion.getValue 
 
@@ -1065,16 +1086,21 @@ let private pipe2RelativelyWithTupleStreamsReturn (direction: Direction) (p1: Ma
             
             newStreams1
             |> List.collect (fun newStream1 ->
-                let p2 = buildP2 newStream1
-                let inputStream2 = (OutputMatrixStream.applyDirectionToShift direction inputstream1 newStream1).AsInputStream
-                p2.Invoke inputStream2
-                |> List.map (fun newStream2 -> 
-                    let newStream2 = 
-                        OutputMatrixStream.mapResultValue (fun result ->
-                            f (newStream1.Result.Value, result)
-                        ) newStream2
-                    newStream1, newStream2
-                )
+                let shiftedNewStream1 = OutputMatrixStream.applyDirectionToShift direction inputstream1 newStream1
+                let p2 = buildP2 shiftedNewStream1
+                let inputStream2 = (shiftedNewStream1).AsInputStream
+                
+                let r = 
+                    p2.Invoke inputStream2
+                    |> List.map (fun newStream2 -> 
+                        let newStream2 = 
+                            OutputMatrixStream.mapResultValue (fun result ->
+                                f (newStream1.Result.Value, result)
+                            ) newStream2
+                        newStream1, newStream2
+                    )
+
+                r
             )
         | List.None -> []
 
@@ -1363,12 +1389,13 @@ let mxUntilBacktrackLast direction maxCount pPrevious (pLast: MatrixParser<'resu
     pipe2RelativelyWithTupleStreamsReturn direction (mxManyWithMaxCount direction maxCount (pPrevious <&!> pLast)) (fun _ -> pLast) id
     >> List.map fst
 
+/// pipe2 direction (mxMany1WithMaxCount direction maxCount (pPrevious <&!> pLast)) pLast id
 let mxUntil1 direction maxCount pPrevious (pLast: MatrixParser<'result>) =
     pipe2 direction (mxMany1WithMaxCount direction maxCount (pPrevious <&!> pLast)) pLast id
 
 
 
-
+/// pipe2 direction (mxMany1WithMaxCount direction maxCount (pPrevious)) pLast id
 let mxUntil1NoConfict direction maxCount pPrevious (pLast: MatrixParser<'result>) =
     pipe2 direction (mxMany1WithMaxCount direction maxCount (pPrevious)) pLast id
 
@@ -1665,6 +1692,43 @@ let runMatrixParserForRange2_Union logger (range : ExcelRangeUnion) (p : MatrixP
     runMatrixParserForRangeWithStreamsAsResult2_Union logger range p
     |> List.map (fun m -> m.Result.Value)
 
+let runMatrixParserForRangeWithStreamsAsResult_Safe_Union (range : ExcelRangeUnion) (p : MatrixParser<'result>) =
+    let logger = new Logger()
+    let r = 
+        runMatrixParserForRangeWithStreamsAsResult2_Union logger range p
+
+    match r with
+    | [] -> 
+        match logger.Messages().IsEmpty with 
+        | true ->
+            let msg = sprintf "Address: %s\n ParsingTarget: %s\nAll named parsed are parsed failured %A\nStackTrace:\n%s" range.Address (typeof<'result>.Name) p System.Environment.StackTrace 
+            raise(ExcelProcesserPasingErrorException(msg, logger))
+        | false ->
+            let msg = sprintf "Address: %s\n ParsingTarget: %s\n%A\nStackTrace%s" range.Address (typeof<'result>.Name) (logger.Messages()) System.Environment.StackTrace 
+            raise(ExcelProcesserPasingErrorException(msg, logger))
+            
+    | outputStreams -> (AtLeastOneList.Create outputStreams)
+
+let runMatrixParserForRange_Safe_Union (range : ExcelRangeUnion) (p : MatrixParser<'result>) =
+    let logger = new Logger()
+    let r = 
+        runMatrixParserForRangeWithStreamsAsResult2_Union logger range p
+        |> List.map (fun m -> m.Result.Value)
+
+    match r with
+    | [] -> 
+        match logger.Messages().IsEmpty with 
+        | true -> 
+            let msg = sprintf "Address: %s\n ParsingTarget: %s\nAll named parsed are parsed failured %A\nStackTrace:\n%s" range.Address (typeof<'result>.Name) p System.Environment.StackTrace 
+            raise(ExcelProcesserPasingErrorException(msg, logger))
+        
+        | false ->
+            let msg = sprintf "Address: %s\n ParsingTarget: %s\n%A\nStackTrace%s" range.Address (typeof<'result>.Name) (logger.Messages()) System.Environment.StackTrace 
+            raise(ExcelProcesserPasingErrorException(msg, logger))
+    
+    
+    | outputStreams -> (AtLeastOneList.Create outputStreams)
+
 let runMatrixParserForRange2 logger (range : ExcelRangeBase) (p : MatrixParser<_>) =
     runMatrixParserForRangeWithStreamsAsResult2 logger range p
     |> List.map (fun m -> m.Result.Value)
@@ -1683,6 +1747,8 @@ let runMatrixParserForRange_Union (range : ExcelRangeUnion) (p : MatrixParser<_>
     runMatrixParserForRangeWithStreamsAsResult_Union range p
     |> List.map (fun m -> m.Result.Value)
 
+
+
 let runMatrixParserForRange (range : ExcelRangeBase) (p : MatrixParser<_>) =
     runMatrixParserForRangeWithStreamsAsResult range p
     |> List.map (fun m -> m.Result.Value)
@@ -1698,8 +1764,18 @@ let runMatrixParserForRangeWithoutRedundent (range : ExcelRangeBase) (p : Matrix
     |> List.map (fun m -> m.Result.Value)
 
 /// Including Empty Ranges
-let  private runMatrixParserWithStreamsAsResult_Common (worksheet: ValidExcelWorksheet) logger (p: MatrixParser<_>) =
-  
+let  private runMatrixParserWithStreamsAsResult_Common (worksheet: ValidExcelWorksheet) (configuration: Configuration) (p: MatrixParser<_>) =
+    let userRange, endRow, endColumn =
+        let r =
+            worksheet.Value
+            |> ExcelWorksheet.getUserRangeListWith (configuration.MaximumEmptyColumnNumber)
+
+        let userRange =
+            r.UserRange
+            |> List.map SingletonExcelRangeBaseUnion.Office
+
+        (userRange, r.MaxRow, r.MaxCol)
+
     #if TestVirtual
     let userRange =
         let datas = worksheet.ReadDatas(RangeGettingOptions.UserRange)
@@ -1707,11 +1783,6 @@ let  private runMatrixParserWithStreamsAsResult_Common (worksheet: ValidExcelWor
         |> VirtualExcelRange.OfData
         |> fun m -> m.AsCellRanges()
         |> List.map SingletonExcelRangeBaseUnion.Virtual
-    #else
-    let userRange = 
-        worksheet.Value
-        |> ExcelWorksheet.getUserRangeList
-        |> List.map SingletonExcelRangeBaseUnion.Office
     #endif
 
 
@@ -1719,33 +1790,40 @@ let  private runMatrixParserWithStreamsAsResult_Common (worksheet: ValidExcelWor
         { 
             StartRow = 1
             StartColumn = 1
-            EndRow = ExcelWorksheet.getMaxRowNumber worksheet.Value
-            EndColumn = ExcelWorksheet.getMaxColNumber worksheet.Value
+            EndRow = endRow
+            EndColumn = endColumn
         }
         |> ParsingAddress
 
-    let r = runMatrixParserForRangesWithStreamsAsResult_Common addr logger userRange p
+    let r = runMatrixParserForRangesWithStreamsAsResult_Common addr configuration.Logger userRange p
     r
 
+
 let runMatrixParser (worksheet: ValidExcelWorksheet) (p: MatrixParser<_>) =
-    runMatrixParserWithStreamsAsResult_Common worksheet (new Logger()) p
+    runMatrixParserWithStreamsAsResult_Common worksheet (Configuration.CreateDefault()) p
     |> List.map (fun m -> m.Result.Value)
 
 let runMatrixParserWithStreamsAsResult (worksheet: ValidExcelWorksheet) (p: MatrixParser<'result>) = 
-    runMatrixParserWithStreamsAsResult_Common worksheet (new Logger()) p
+    runMatrixParserWithStreamsAsResult_Common worksheet (Configuration.CreateDefault()) p
     
 
 let runMatrixParserWithStreamsAsResultSafe (worksheet: ValidExcelWorksheet) (p: MatrixParser<'result>) =
 
-    let logger = new Logger()
+    let configuration = Configuration.CreateDefault()
+    let logger = configuration.Logger
 
-    match runMatrixParserWithStreamsAsResult_Common worksheet (logger) p with 
+    match runMatrixParserWithStreamsAsResult_Common worksheet (configuration) p with 
     | [] -> 
         match logger.Messages().IsEmpty with 
-        | true -> failwithf "SheetName: %s\n ParsingTarget: %s\nAll named parsed are parsed failured %A\nStackTrace:\n%s" worksheet.Name (typeof<'result>.Name) p System.Environment.StackTrace 
+        | true -> 
+            let msg = sprintf "SheetName: %s\n ParsingTarget: %s\nAll named parsed are parsed failured %A\nStackTrace:\n%s" worksheet.Name (typeof<'result>.Name) p System.Environment.StackTrace 
+            raise(ExcelProcesserPasingErrorException(msg, logger))
+            
         | false ->
-            failwithf "SheetName: %s\n ParsingTarget: %s\n%A\nStackTrace%s" worksheet.Name (typeof<'result>.Name) (logger.Messages()) System.Environment.StackTrace 
+            let msg = sprintf "SheetName: %s\n ParsingTarget: %s\n%A\nStackTrace%s" worksheet.Name (typeof<'result>.Name) (logger.Messages()) System.Environment.StackTrace 
+            raise(ExcelProcesserPasingErrorException(msg, logger))
     | outputStreams -> (AtLeastOneList.Create outputStreams)
+
 
 
 type MatrixParserSuccessfulResult<'result> = private MatrixParserSuccessfulResult of AtLeastOneList<'result>

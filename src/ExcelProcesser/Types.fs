@@ -118,6 +118,15 @@ with
           RootData = x.RootData
         }
 
+
+    member x.CurrentDatas() =
+        x.RootData.[
+            (x.ExcelAddress.StartRow    - 1) ..  (x.ExcelAddress.EndRow    - 1) ,
+            (x.ExcelAddress.StartColumn - 1) ..  (x.ExcelAddress.EndColumn - 1) 
+        ]
+
+    member private x.CurrentDatas_Value = x.CurrentDatas()
+
 type VirtualSingletonExcelRange with 
     member x.AsRange =
         { RootData = x.RootData 
@@ -414,8 +423,8 @@ module Operators =
 
 
     type Logger() =
-        do
-            GlobalDiagnosticsContext.Set("Application", "My cool app");
+        //do
+        //    GlobalDiagnosticsContext.Set("Application", "My cool app");
         
 
         let infos = new List<string>()
@@ -442,6 +451,17 @@ module Operators =
             { Infos = List.ofSeq infos
               Importants = List.ofSeq imports
               AllMessages = List.ofSeq allMessages }
+
+
+
+    type Configuration =
+        { Logger: Logger 
+          MaximumEmptyColumnNumber: int option }
+    with
+        static member CreateDefault() =
+            { Logger = Logger() 
+              MaximumEmptyColumnNumber = Some 15 }
+
 
 
     let ensureFParsecValid text parser  =
