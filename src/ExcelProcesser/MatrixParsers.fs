@@ -889,6 +889,8 @@ let mxStyleName styleName = mxCellParser (pStyleName styleName) SingletonExcelRa
 let mxAnySkip = 
     mxCellParser pAny ignore 
 
+
+
 let mxAnyOrigin = 
     mxCellParser pAny SingletonExcelRangeBaseUnion.getText 
 
@@ -902,6 +904,9 @@ let mxAddress address =
 
 let mxColAddress columnIndex = 
     mxCellParserOp(fun range ->
+        if range.ExcelCellAddress.Column = 15
+        then ()
+
         if range.ExcelCellAddress.Column = columnIndex
         then Some range.Text
         else None
@@ -947,6 +952,10 @@ module LoggerExtensions =
                 //if not outputStreams.IsEmpty 
                 //then logger.Log loggerLevel (sprintf "END %s:" name)
 
+                match outputStreams.Length > 0 with 
+                | true -> ()
+                | false -> ()
+
                 outputStreams
 
 
@@ -969,9 +978,14 @@ module LoggerExtensions =
                         let addr = range.Address
                         sprintf $"{name}\tResult: {addr}: {outputStream.Result.Value}"
 
+                    printfn "%s" message
                     logger.Log loggerLevel message
 
-                | None -> ()
+                | None -> 
+                    //let message = sprintf "%s Parsing %s failed " name inputStream.Range.Address
+                    //printfn "%s" message
+                    
+                    ()
 
                 //if not outputStreams.IsEmpty 
                 //then logger.Log loggerLevel (sprintf "END %s:" name)
@@ -1007,6 +1021,8 @@ let mxEOF  =
             |> Some
     |> SingletonMatrixParser
 
+
+
 let mxNotEOF()  =
     mxCellParserOp_common (fun inputStream range ->
         match inputStream.ParsingAddress.ComparableExcelAddress.Contains(range.ExcelAddress) with 
@@ -1026,6 +1042,9 @@ let mxOR (p1: MatrixParser<'result1>) (p2: MatrixParser<'result2>) =
         | List.Some streams -> streams
         | _ -> p2.Invoke inputStream
     |> MatrixParser
+
+let mxAnySkip_IncludingEof =
+    mxOR (mxEOF) mxAnySkip
 
 let mxNot (p1: SingletonMatrixParser<'result1>) =
     fun inputStream ->
@@ -1099,6 +1118,8 @@ let private pipe2RelativelyWithTupleStreamsReturn (direction: Direction) (p1: Ma
                             ) newStream2
                         newStream1, newStream2
                     )
+
+                let l = r.Length
 
                 r
             )
@@ -1435,11 +1456,18 @@ let mxUntilA maxCount (p: MatrixParser<'result>) =
     ||>> snd
 
 
+/// AnySkip_IncludeEOF >>. pUntil
+let mxUntilAEOF maxCount (p: MatrixParser<'result>) =
+    inDirection (fun direction ->
+        mxUntil direction maxCount mxAnySkip_IncludingEof p
+    )
+    ||>> snd
 
 
 let mxUntilIND50 pPrevious (pLast: MatrixParser<'result>) = mxUntilIND (Some 50) pPrevious (pLast: MatrixParser<'result>)
 
 let mxUntilA50 (p: MatrixParser<'result>) = mxUntilA (Some 50) p
+let mxUntilA50_EOF (p: MatrixParser<'result>) = mxUntilAEOF (Some 50) p
 
 let mxUntilA10 (p: MatrixParser<'result>) = mxUntilA (Some 10) p
 
@@ -1810,13 +1838,13 @@ let runMatrixParserWithStreamsAsResult (worksheet: ValidExcelWorksheet) (p: Matr
 let runMatrixParserWithStreamsAsResultSafe (worksheet: ValidExcelWorksheet) (p: MatrixParser<'result>) =
 
     let configuration = Configuration.CreateDefault()
-    let logger = configuration.Logger
+    let logger        = configuration.Logger
 
     match runMatrixParserWithStreamsAsResult_Common worksheet (configuration) p with 
     | [] -> 
         match logger.Messages().IsEmpty with 
         | true -> 
-            let msg = sprintf "SheetName: %s\n ParsingTarget: %s\nAll named parsed are parsed failured %A\nStackTrace:\n%s" worksheet.Name (typeof<'result>.Name) p System.Environment.StackTrace 
+            let msg = sprintf "SheetName: %s\n ParsingTarget: %s\nAll named parsed are parsed failured %A\nStackTrace:\n%s"  worksheet.Name (typeof<'result>.Name) p System.Environment.StackTrace 
             raise(ExcelProcesserPasingErrorException(msg, logger))
             
         | false ->

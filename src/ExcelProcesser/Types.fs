@@ -413,44 +413,8 @@ module Operators =
 
     let nlog = NLog.LogManager.GetCurrentClassLogger()
 
-    type Messages =
-        { Infos: string list 
-          Importants: string list
-          AllMessages: string list }
-    with 
-        member x.IsEmpty = x.Infos.IsEmpty && x.Importants.IsEmpty
 
 
-
-    type Logger() =
-        //do
-        //    GlobalDiagnosticsContext.Set("Application", "My cool app");
-        
-
-        let infos = new List<string>()
-        
-        let imports = new List<string>()
-        let allMessages = new List<string>()
-
-        member x.Log loggerLevel (message: string) = 
-            match loggerLevel with 
-            | LoggerLevel.Info  -> 
-                nlog.Info message
-                infos.Add(message)
-                allMessages.Add(message)
-
-            | LoggerLevel.Important ->
-                nlog.Error message
-                imports.Add(message)
-                allMessages.Add(message)
-
-            | LoggerLevel.Slient -> ()
-
-
-        member x.Messages() = 
-            { Infos = List.ofSeq infos
-              Importants = List.ofSeq imports
-              AllMessages = List.ofSeq allMessages }
 
 
 
@@ -459,7 +423,14 @@ module Operators =
           MaximumEmptyColumnNumber: int option }
     with
         static member CreateDefault() =
-            { Logger = Logger() 
+            let logger =
+                #if DEBUG
+                    Logger(printInConsole = [LoggerLevel.Info], addLoggerInfo_printing = true) 
+                #else 
+                    Logger() 
+                #endif
+
+            { Logger = logger
               MaximumEmptyColumnNumber = Some 15 }
 
 

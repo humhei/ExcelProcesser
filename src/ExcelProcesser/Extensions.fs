@@ -10,11 +10,6 @@ open CellScript.Core.Extensions
 open System.Diagnostics
 
 
-type LoggerLevel = 
-    | Info = 0
-    | Important = 1
-    | Slient = 2
-
 
 
 
@@ -156,10 +151,10 @@ module Extensions =
     module ExcelWorksheet =
 
         let internal getMaxColNumber (worksheet:ExcelWorksheet) =
-            worksheet.Dimension.End.Column
+            worksheet.FixedDimension.End.Column
 
         let internal getMaxRowNumber (worksheet:ExcelWorksheet) =
-            worksheet.Dimension.End.Row
+            worksheet.FixedDimension.End.Row
 
         let getUserRangeListWith maximumEmptyColumns (worksheet: ExcelWorksheet) =
             let maxRow = getMaxRowNumber worksheet

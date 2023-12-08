@@ -16,16 +16,17 @@
     <Compile Include="CellParsers.fs" />
     <Compile Include="MatrixParsers.fs" />
     <Compile Include="MathParsers.fs" />
+    <Compile Include="Expr.fs" />
     <Compile Include="SematicsParsers\ContentsTable.fs" />
     <Compile Include="SematicsParsers\Normal.fs" />
     <Compile Include="SematicsParsers\RangeInHeader.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="CellScript.Core" Version="0.1.352" />
+    <PackageReference Include="CellScript.Core" Version="0.1.429" />
     <PackageReference Include="Deedle" Version="2.1.2" />
     <PackageReference Include="FParsec" Version="1.1.1" />
     <PackageReference Include="NLog" Version="4.7.7" />
-    <PackageReference Include="Shrimp.FSharp.Plus" Version="1.1.514" />
+    <PackageReference Include="Shrimp.FSharp.Plus" Version="5.99.427" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
   </ItemGroup>
 
