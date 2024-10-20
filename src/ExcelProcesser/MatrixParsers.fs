@@ -341,7 +341,7 @@ type InputMatrixStream =
       ParsingAddress: ParsingAddress
       Logger: Logger }
 with 
-    member internal stream.OffsetedRange =
+    member stream.OffsetedRange =
         SingletonExcelRangeBaseUnion.offset stream.Shift stream.Range
 
     member private x.LastCellShift = x.Shift.Last
@@ -446,6 +446,18 @@ type OutputMatrixStream<'result> =
       Result: OutputMatrixStreamResult<'result> }
 
 with 
+
+    member x.MapResult(f) =
+        {
+            Range = x.Range
+            Shift = x.Shift
+            Logger = x.Logger
+            ParsingAddress = x.ParsingAddress
+            Result =
+                { Value = f x.Result.Value 
+                  IsSkip = x.Result.IsSkip }
+        }
+ 
 
     member stream.OffsetedRange =
         SingletonExcelRangeBaseUnion.offset stream.Shift stream.Range
@@ -685,6 +697,13 @@ type MatrixParser<'result>(invoke: InputMatrixStream -> OutputMatrixStream<'resu
             r
         |> MatrixParser
 
+    member x.InDebugEx(f) = 
+        fun inputStream ->
+            f invoke inputStream
+            let r = invoke inputStream
+            r
+        |> MatrixParser
+
 
     member x.InvokeToStreams (outputStream: OutputMatrixStream<_>, rangeTransformer: RangeTransformer) =
         let inputStream =
@@ -861,6 +880,10 @@ let mxText text =
 let mxTextf f =
     mxCellParser (pTextf f) SingletonExcelRangeBaseUnion.getText
 
+let mxTextf_Range f =
+    mxCellParser (f) SingletonExcelRangeBaseUnion.getText
+
+
 let mxNonEmpty = 
     mxTextf isTrimmedTextNotEmpty
 
@@ -894,6 +917,10 @@ let mxAnySkip =
 let mxAnyOrigin = 
     mxCellParser pAny SingletonExcelRangeBaseUnion.getText 
 
+let mxAnyF f = 
+    mxCellParser pAny f
+
+
 let mxAddress address = 
     let targetAddress = new ExcelAddress(address)
     mxCellParserOp(fun range ->
@@ -921,6 +948,7 @@ let mxRowAddress rowIndex =
 
 let mxAnyOriginObj = 
     mxCellParser pAny SingletonExcelRangeBaseUnion.getValue 
+
 
 
 //let (||>>) p f = 
@@ -1102,34 +1130,44 @@ let private pipe2RelativelyWithTupleStreamsReturn (direction: Direction) (p1: Ma
         let newStreams1 = p1.Invoke inputstream1
         match newStreams1 with 
         | List.Some newStreams1 ->
-            
-            newStreams1
-            |> List.collect (fun newStream1 ->
-                let shiftedNewStream1 = OutputMatrixStream.applyDirectionToShift direction inputstream1 newStream1
-                let p2 = buildP2 shiftedNewStream1
-                let inputStream2 = (shiftedNewStream1).AsInputStream
+            let r = 
+                newStreams1
+                |> List.collect (fun newStream1 ->
+                    let shiftedNewStream1 = OutputMatrixStream.applyDirectionToShift direction inputstream1 newStream1
+                    let p2 = buildP2 shiftedNewStream1
+                    let inputStream2 = (shiftedNewStream1).AsInputStream
                 
-                let r = 
-                    p2.Invoke inputStream2
-                    |> List.map (fun newStream2 -> 
-                        let newStream2 = 
-                            OutputMatrixStream.mapResultValue (fun result ->
-                                f (newStream1.Result.Value, result)
-                            ) newStream2
-                        newStream1, newStream2
-                    )
+                    let r = 
+                        p2.Invoke inputStream2
+                        |> List.map (fun newStream2 -> 
+                            let newStream2 = 
+                                OutputMatrixStream.mapResultValue (fun result ->
+                                    f (newStream1.Result.Value, result)
+                                ) newStream2
+                            newStream1, newStream2
+                        )
 
-                let l = r.Length
 
-                r
-            )
+                    let l = r.Length
+
+                    r
+                )
+
+            r
         | List.None -> []
-
 
 let private pipe2Relatively (direction: Direction) (p1: MatrixParser<'result1>) (buildP2: OutputMatrixStream<'result1> -> MatrixParser<'result2>) f =
     
     pipe2RelativelyWithTupleStreamsReturn direction p1 buildP2 f
-    >> List.map snd
+    >> List.map (fun (stream1, stream2) ->
+        match stream1.Result.IsSkip, stream2.Result.IsSkip with 
+        | false, true ->  
+            stream1.MapResult(fun _ -> stream2.Result.Value)
+            //{ stream2 with 
+            //    Result.IsSkip = false 
+            //}
+        | _ -> stream2
+    )
     |> MatrixParser
     
 
@@ -1137,10 +1175,24 @@ let private pipe2Relatively (direction: Direction) (p1: MatrixParser<'result1>) 
 let pipe2 direction p1 p2 f = 
     pipe2Relatively direction p1 (fun _ -> p2) f
 
+
 let pipe3 direction p1 p2 p3 f =
     pipe2 direction (pipe2 direction p1 p2 id) p3 (fun ((a, b), c) ->
         f (a, b, c)
     )
+
+let mxBatch direction (parsers: #MatrixParser<_> al1List) =
+    let rec loop accumParser parsers =
+        match parsers with 
+        | [] -> accumParser
+        | parser :: t ->
+            let newAccumParser = 
+                pipe2 direction (accumParser) parser (fun (a, b) -> a @ [b])
+            loop newAccumParser t
+
+    loop ((parsers.Head :> MatrixParser<_>) ||>> List.singleton) parsers.Tail
+            
+
 
 let atLeastOne (p: MatrixParser<'a list>) =
     p
@@ -1170,13 +1222,19 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
             else
                 match stream with
                 | MatrixStream.Input inputStream ->
+                    match inputStream.OffsetedRange.Address.Contains "H" with 
+                    | true -> 
+                        let a = 1
+                        let b = a 
+                        ()
+                    | false -> ()
                     match p inputStream with 
                     | List.Some outputStreams ->
                         let skip, outputStreams = List.partition isSkip outputStreams 
-
-                        yield! List.replicate skip.Length []
-
-                        yield! loop (MatrixStream.Output (inputStream,outputStreams)) (accum @ outputStreams) 
+                        let r1 = List.replicate skip.Length []
+                        let r2 = loop (MatrixStream.Output (inputStream,outputStreams)) (accum @ outputStreams) 
+                        yield! r1
+                        yield! r2
 
                     | List.None -> yield []
 
@@ -1236,6 +1294,23 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
                     }
                 }
         )
+
+
+let mxMany_exactly count direction p =
+    fun (inputStream: InputMatrixStream) ->
+        let r  = (mxManyWithMaxCount direction (Some count) p).Invoke inputStream
+        match r with 
+        | [r] ->
+            match r.Result.IsSkip with 
+            | true -> []
+            | false ->
+                match r.Result.Value.Length with 
+                | EqualTo count -> [r]
+                | _ -> []
+
+        | _ -> failwith "Not implemented"
+
+    
 
 let mxMany_all_ForRowOrColumn direction p =
     fun (inputStream: InputMatrixStream) ->
@@ -1424,15 +1499,25 @@ let mxUntil1NoConfict direction maxCount pPrevious (pLast: MatrixParser<'result>
 let mxUntil1BacktrackLast direction maxCount pPrevious (pLast: MatrixParser<'result>) =
     pipe2RelativelyWithTupleStreamsReturn direction (mxMany1WithMaxCount direction maxCount (pPrevious <&!> pLast)) (fun _ -> pLast) id
     >> List.map fst
+    |> MatrixParser
 
 let mxUntil2BacktrackLast direction maxCount pPrevious (pLast: MatrixParser<'result>) =
     pipe2RelativelyWithTupleStreamsReturn direction (mxMany2WithMaxCount direction maxCount (pPrevious <&!> pLast)) (fun _ -> pLast) id
-    >> List.map fst
+    >> (fun inputs ->
+        List.map fst inputs
+    )
+    |> MatrixParser
 
 /// IND = inDirection
 let mxUntilIND maxCount pPrevious (pLast: MatrixParser<'result>) =
     inDirection (fun direction ->
         mxUntil direction maxCount pPrevious (pLast: MatrixParser<'result>)
+    )
+
+/// IND = inDirection
+let mxUntil1IND maxCount pPrevious (pLast: MatrixParser<'result>) =
+    inDirection (fun direction ->
+        mxUntil1 direction maxCount pPrevious (pLast: MatrixParser<'result>)
     )
 
 let mxUntilIND_EOF pPrevious =
@@ -1454,6 +1539,7 @@ let mxUntilA maxCount (p: MatrixParser<'result>) =
         mxUntil direction maxCount mxAnySkip p
     )
     ||>> snd
+
 
 
 /// AnySkip_IncludeEOF >>. pUntil
@@ -1685,6 +1771,11 @@ let runMatrixParserForRangeWithStreamsAsResult_Union (range : ExcelRangeUnion) (
     let mses = runMatrixParserForRangesWithStreamsAsResult address ranges p
     mses
 
+let runMatrixParserForRangeWithStreamsAsResult_Union_WithoutRedundants (range : ExcelRangeUnion) (p : MatrixParser<_>) =
+    let r = runMatrixParserForRangeWithStreamsAsResult_Union range p
+    r
+    |> OutputMatrixStream.removeRedundants
+
 
 let runMatrixParserForRangeWithStreamsAsResult (range : ExcelRangeBase) (p : MatrixParser<_>) =
     runMatrixParserForRangeWithStreamsAsResult_Union (ExcelRangeUnion.Office range) p
@@ -1736,6 +1827,14 @@ let runMatrixParserForRangeWithStreamsAsResult_Safe_Union (range : ExcelRangeUni
             raise(ExcelProcesserPasingErrorException(msg, logger))
             
     | outputStreams -> (AtLeastOneList.Create outputStreams)
+
+
+let runMatrixParserForRangeWithStreamsAsResult_Safe_Union_WithoutRedundants (range : ExcelRangeUnion) (p : MatrixParser<_>) =
+    let r = runMatrixParserForRangeWithStreamsAsResult_Safe_Union range p
+    r.AsList
+    |> OutputMatrixStream.removeRedundants
+    |> AtLeastOneList.Create
+
 
 let runMatrixParserForRange_Safe_Union (range : ExcelRangeUnion) (p : MatrixParser<'result>) =
     let logger = new Logger()
@@ -1853,6 +1952,11 @@ let runMatrixParserWithStreamsAsResultSafe (worksheet: ValidExcelWorksheet) (p: 
     | outputStreams -> (AtLeastOneList.Create outputStreams)
 
 
+let runMatrixParserWithStreamsAsResultSafe_WithoutRedundent (worksheet: ValidExcelWorksheet) (p: MatrixParser<'result>) =
+    runMatrixParserWithStreamsAsResultSafe worksheet p
+    |> AtLeastOneList.get
+    |> OutputMatrixStream.removeRedundants
+    |> AtLeastOneList.Create
 
 type MatrixParserSuccessfulResult<'result> = private MatrixParserSuccessfulResult of AtLeastOneList<'result>
 with 

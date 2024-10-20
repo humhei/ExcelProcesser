@@ -431,7 +431,7 @@ module Operators =
                 #endif
 
             { Logger = logger
-              MaximumEmptyColumnNumber = Some 15 }
+              MaximumEmptyColumnNumber = Some 26 }
 
 
 

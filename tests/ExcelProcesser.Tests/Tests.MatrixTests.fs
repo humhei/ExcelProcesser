@@ -8,6 +8,7 @@ open OfficeOpenXml
 open System.IO
 open ExcelProcesser.Extensions
 open CellScript.Core
+open Shrimp.FSharp.Plus
 
 let pass() = Expect.isTrue true "passed"
 let fail() = Expect.isTrue false "failed"
@@ -366,6 +367,7 @@ let matrixTests =
         match results with 
         | ["cm_skip_1"; "cm_skip_2"; "cm_skip_3"] :: _  -> pass()
         | _ -> fail()
+
 
     testCase "emptyRow" <| fun _ -> 
         let parser = 
