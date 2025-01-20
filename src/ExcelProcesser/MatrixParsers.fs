@@ -1133,6 +1133,9 @@ let private pipe2RelativelyWithTupleStreamsReturn (direction: Direction) (p1: Ma
             let r = 
                 newStreams1
                 |> List.collect (fun newStream1 ->
+                    match newStream1.OffsetedRange.Address = "G27" with 
+                    | true -> ()
+                    | false -> ()
                     let shiftedNewStream1 = OutputMatrixStream.applyDirectionToShift direction inputstream1 newStream1
                     let p2 = buildP2 shiftedNewStream1
                     let inputStream2 = (shiftedNewStream1).AsInputStream
@@ -1222,12 +1225,12 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
             else
                 match stream with
                 | MatrixStream.Input inputStream ->
-                    match inputStream.OffsetedRange.Address.Contains "H" with 
-                    | true -> 
-                        let a = 1
-                        let b = a 
-                        ()
-                    | false -> ()
+                    //match inputStream.OffsetedRange.Address.Contains "H" with 
+                    //| true -> 
+                    //    let a = 1
+                    //    let b = a 
+                    //    ()
+                    //| false -> ()
                     match p inputStream with 
                     | List.Some outputStreams ->
                         let skip, outputStreams = List.partition isSkip outputStreams 
