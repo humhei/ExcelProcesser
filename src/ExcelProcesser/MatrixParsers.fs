@@ -1209,64 +1209,122 @@ let atLeastTwo (p: MatrixParser<'a list>) =
         list.Length > 1
     )
 
+let atLeastX minimunCount (p: MatrixParser<'a list>) =
+    p
+    |> MatrixParser.filterOutputStreamByResultValue (fun list ->
+        list.Length >= minimunCount
+    )
+
+
 let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result>) = map p <| fun p ->
     let isSkip outputStream = 
         outputStream.Result.IsSkip
 
-    fun inputStream ->
-        let rec loop stream (accum: OutputMatrixStream<'result> list) = [
+    fun inputStream ->  
+        let accumResizeArray = ResizeArray()
+        let rec loop stream (accum: OutputMatrixStream<'result> list) = 
             let isReachMaxCount =
                 match maxCount with 
                 | Some maxCount -> 
                     accum.Length >= maxCount
                 | None -> false
 
-            if isReachMaxCount then yield accum
+            if isReachMaxCount then accumResizeArray.Add(accum)
             else
                 match stream with
                 | MatrixStream.Input inputStream ->
-                    //match inputStream.OffsetedRange.Address.Contains "H" with 
-                    //| true -> 
-                    //    let a = 1
-                    //    let b = a 
-                    //    ()
-                    //| false -> ()
                     match p inputStream with 
                     | List.Some outputStreams ->
                         let skip, outputStreams = List.partition isSkip outputStreams 
                         let r1 = List.replicate skip.Length []
-                        let r2 = loop (MatrixStream.Output (inputStream,outputStreams)) (accum @ outputStreams) 
-                        yield! r1
-                        yield! r2
+                        accumResizeArray.AddRange(r1)
+                        loop (MatrixStream.Output (inputStream,outputStreams)) (accum @ outputStreams) 
 
-                    | List.None -> yield []
+                    | List.None -> accumResizeArray.Add([])
 
-                | MatrixStream.Output (preInputStream,outputStreams1) ->
+                | MatrixStream.Output (preInputStream, outputStreams1) ->
                     match outputStreams1 with 
                     | List.Some outputStreams1 ->
+                        outputStreams1
+                        |> List.iter (fun outputStream1 -> 
+                            let inputStream = (OutputMatrixStream.applyDirectionToShift direction preInputStream outputStream1).AsInputStream
+                            match p inputStream with 
+                            | List.Some outputStreams2 ->
+                                let skip, outputStreams2 = List.partition isSkip outputStreams2
 
-                        yield!
-                            outputStreams1
-                            |> List.collect (fun outputStream1 -> [
-                                let inputStream = (OutputMatrixStream.applyDirectionToShift direction preInputStream outputStream1).AsInputStream
-                                match p inputStream with 
-                                | List.Some outputStreams2 ->
-                                    let skip, outputStreams2 = List.partition isSkip outputStreams2
+                                let r1 = List.replicate skip.Length []
+                                accumResizeArray.AddRange(r1)
 
-                                    yield! List.replicate skip.Length []
+                                loop (MatrixStream.Output (inputStream, outputStreams2)) (accum @ outputStreams2)
 
-                                    yield! loop (MatrixStream.Output (inputStream, outputStreams2)) (accum @ outputStreams2)
-
-                                | List.None ->  yield accum
-                            ]
-                            )
-
-                    | List.None -> yield accum
-        ]
+                            | List.None ->  accumResizeArray.Add accum
+                        
+                        )
+                    | List.None -> accumResizeArray.Add accum
+        
 
 
+            
 
-        let outputStreamLists = loop (MatrixStream.Input inputStream) []
+
+        let outputStreamLists = 
+            loop (MatrixStream.Input inputStream) []
+            List.ofSeq accumResizeArray
+
+        //let rec loop stream (accum: OutputMatrixStream<'result> list) = [
+        //    let isReachMaxCount =
+        //        match maxCount with 
+        //        | Some maxCount -> 
+        //            accum.Length >= maxCount
+        //        | None -> false
+
+        //    if isReachMaxCount then yield accum
+        //    else
+        //        match stream with
+        //        | MatrixStream.Input inputStream ->
+        //            //match inputStream.OffsetedRange.Address.Contains "H" with 
+        //            //| true -> 
+        //            //    let a = 1
+        //            //    let b = a 
+        //            //    ()
+        //            //| false -> ()
+        //            match p inputStream with 
+        //            | List.Some outputStreams ->
+        //                let skip, outputStreams = List.partition isSkip outputStreams 
+        //                let r1 = List.replicate skip.Length []
+        //                let r2 = loop (MatrixStream.Output (inputStream,outputStreams)) (accum @ outputStreams) 
+        //                yield! r1
+        //                yield! r2
+
+        //            | List.None -> yield []
+
+        //        | MatrixStream.Output (preInputStream,outputStreams1) ->
+        //            match outputStreams1 with 
+        //            | List.Some outputStreams1 ->
+
+        //                yield!
+        //                    outputStreams1
+        //                    |> List.collect (fun outputStream1 -> [
+        //                        let inputStream = (OutputMatrixStream.applyDirectionToShift direction preInputStream outputStream1).AsInputStream
+        //                        match p inputStream with 
+        //                        | List.Some outputStreams2 ->
+        //                            let skip, outputStreams2 = List.partition isSkip outputStreams2
+
+        //                            yield! List.replicate skip.Length []
+
+        //                            yield! loop (MatrixStream.Output (inputStream, outputStreams2)) (accum @ outputStreams2)
+
+        //                        | List.None ->  yield accum
+        //                    ]
+        //                    )
+
+        //            | List.None -> yield accum
+        //]
+
+
+
+        //let outputStreamLists = loop (MatrixStream.Input inputStream) []
+
         outputStreamLists 
         |> List.map (fun outputStreams ->
             match outputStreams with 
@@ -1359,6 +1417,10 @@ let mxMany1WithMaxCount direction (maxCount: int option) (p: MatrixParser<'resul
     mxManyWithMaxCount direction maxCount p
     |> atLeastOne
 
+let mxManyXWithMaxCount minimunCount direction (maxCount: int option) (p: MatrixParser<'result>) =
+    mxManyWithMaxCount direction maxCount p
+    |> atLeastX minimunCount
+
 let mxMany2WithMaxCount direction (maxCount: int option) (p: MatrixParser<'result>) =
     mxManyWithMaxCount direction maxCount p
     |> atLeastTwo
@@ -1377,6 +1439,7 @@ let mxMany1 direction p =
 let mxManySkipRetain direction pSkip maxSkipCount p = 
     let skip = 
         mxManyWithMaxCount direction (Some maxSkipCount) pSkip 
+
 
     let many1 = mxMany1 direction p
 

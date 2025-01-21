@@ -368,7 +368,7 @@ module ExcelRangeUnion =
         match range with 
         | ExcelRangeUnion.Office v -> 
             #if TestVirtual
-            let datas = v.ReadDatas()
+            let datas = v.ReadDatas(true)
             datas
             |> VirtualExcelRange.OfData
             |> fun m -> m.AsCellRanges()
@@ -391,7 +391,7 @@ module ExcelRangeUnion =
         match range with 
         | ExcelRangeUnion.Office v -> 
             #if TestVirtual
-            let datas = v.ReadDatas()
+            let datas = v.ReadDatas(true)
             datas
             |> VirtualExcelRange.OfData
             |> fun m -> m.AsCellRanges_All()

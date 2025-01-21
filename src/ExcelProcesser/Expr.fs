@@ -50,8 +50,8 @@ module _Expr =
             /// mxUntil1 Direction.Vertical (Some yOffset) mxEmpty (mxExpr expr)
             | YUntil of maxSkipCount: int * pPrevious: MatrixParserExpr * p:MatrixParserExpr
             | MxExpr of TextSelectorOrTransformExpr
-            | XMany1 of maxCount: int * MatrixParserExpr 
-            | YMany1 of maxCount: int * MatrixParserExpr 
+            | XMany1 of maxCount: int * MatrixParserExpr * minimunCount: int
+            | YMany1 of maxCount: int * MatrixParserExpr * minimunCount: int
             | XManySkip1 of skip: MatrixParserExpr * maxSkipCount: int *  MatrixParserExpr 
             | YManySkip1 of skip: MatrixParserExpr * maxSkipCount: int *  MatrixParserExpr 
             | ColIndex of int
@@ -259,7 +259,7 @@ module _Expr =
                     )
                 }
 
-            static member MethodConversion_XMany1(?maxCount, ?p): MethodLiteralConversion<MatrixParserExpr> =
+            static member MethodConversion_XMany1(?maxCount, ?p, ?minimunCount): MethodLiteralConversion<MatrixParserExpr> =
                 let mxUnparsedText = (TextSelectorOrTransformExpr.Unparsed "Unparsed").MethodLiteralText
                 let name = nameof XMany1
                 {
@@ -267,8 +267,9 @@ module _Expr =
                         { Name = name
                           Parameters = 
                             [
-                                nameof maxCount ==> defaultArg maxCount 5
+                                nameof maxCount ==> defaultArg maxCount -1
                                 nameof p  ==> defaultArg p (mxUnparsedText)
+                                nameof minimunCount ==> defaultArg minimunCount 1
                             ]
                             |> Observations.Create
                         }
@@ -286,7 +287,11 @@ module _Expr =
                                 |> MatrixParserExpr.Parse
                                 |> Result.getOrFail
 
-                            MatrixParserExpr.XMany1(maxCount, p)
+                            let minimunCount = 
+                                methodLiteral.Parameters.[nameof minimunCount].Value.Text
+                                |> Int32.parse_detailError
+
+                            MatrixParserExpr.XMany1(maxCount, p, minimunCount)
                             |> Some
 
                         | _ -> None
@@ -371,7 +376,7 @@ module _Expr =
                     )
                 }
 
-            static member MethodConversion_YMany1(?maxCount, ?p): MethodLiteralConversion<MatrixParserExpr> =
+            static member MethodConversion_YMany1(?maxCount, ?p, ?minimunCount): MethodLiteralConversion<MatrixParserExpr> =
                 let mxUnparsedText = (TextSelectorOrTransformExpr.Unparsed "Unparsed").MethodLiteralText
                 let name = nameof YMany1
                 {
@@ -379,8 +384,9 @@ module _Expr =
                         { Name = name
                           Parameters = 
                             [
-                                nameof maxCount ==> defaultArg maxCount 5
+                                nameof maxCount ==> defaultArg maxCount -1
                                 nameof p  ==> defaultArg p (mxUnparsedText)
+                                nameof minimunCount ==> defaultArg minimunCount 1
                             ]
                             |> Observations.Create
                         }
@@ -398,7 +404,11 @@ module _Expr =
                                 |> MatrixParserExpr.Parse
                                 |> Result.getOrFail
 
-                            MatrixParserExpr.YMany1(maxCount, p)
+                            let minimunCount = 
+                                methodLiteral.Parameters.[nameof minimunCount].Value.Text
+                                |> Int32.parse_detailError
+
+                            MatrixParserExpr.YMany1(maxCount, p, minimunCount)
                             |> Some
 
                         | _ -> None
@@ -460,6 +470,12 @@ module _Expr =
                                 |> Result.Ok
 
             member x.ToMatrixParser(?trimAllToOne: bool) =
+                let redirectMaxCount maxCount =
+                    match maxCount with 
+                    | -1 
+                    | 0 -> None
+                    | _ -> Some maxCount
+
                 let trimAllToOne = defaultArg trimAllToOne false
                 match x with 
                 | ColIndex (colIndex) -> 
@@ -482,21 +498,24 @@ module _Expr =
                     ||>> snd
 
                 | MxExpr expr -> mxExprEx trimAllToOne expr
-                | XMany1 (maxCount, expr) -> 
-                    mxMany1WithMaxCount 
+                | XMany1 (maxCount, expr, minimunCount) -> 
+                    mxManyXWithMaxCount 
+                        minimunCount
                         Direction.Horizontal 
-                        (Some maxCount)
+                        (maxCount |> redirectMaxCount)
                         (expr.ToMatrixParser(trimAllToOne = trimAllToOne))
                     ||>> String.concat "@@"
                 
-                | YMany1 (maxCount, expr) -> 
-                    mxMany1WithMaxCount 
+                | YMany1 (maxCount, expr, minimunCount) -> 
+                    mxManyXWithMaxCount 
+                        minimunCount
                         Direction.Vertical 
-                        (Some maxCount)
+                        (maxCount |> redirectMaxCount)
                         (expr.ToMatrixParser(trimAllToOne = trimAllToOne))
                     ||>> String.concat "@@"
 
                 | XManySkip1 (pSkip, maxSkipCount, expr) ->
+                    /// Atleast 1 skip
                     mxMany1Skip1 
                         Direction.Horizontal
                         (pSkip.ToMatrixParser(trimAllToOne = trimAllToOne))
@@ -505,6 +524,7 @@ module _Expr =
                     ||>> String.concat "@@"
 
                 | YManySkip1 (pSkip, maxSkipCount, expr) ->
+                    /// Atleast 1 skip
                     mxMany1Skip1 
                         Direction.Vertical
                         (pSkip.ToMatrixParser(trimAllToOne = trimAllToOne))
