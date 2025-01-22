@@ -415,12 +415,19 @@ module Operators =
 
 
 
-
-
+    [<RequireQualifiedAccess>]
+    type Accum_DuplicateOptions = 
+        | AllowDuplicate 
+        | SkipDuplicateWhenRowsCount of DecimalSelector
+    with 
+        /// Accum_DuplicateOptions
+        static member DefaultValue = Accum_DuplicateOptions.AllowDuplicate
 
     type Configuration =
         { Logger: Logger 
-          MaximumEmptyColumnNumber: int option }
+          MaximumEmptyColumnNumber: int option
+          Accum_DuplicateOptions: Accum_DuplicateOptions
+          }
     with
         static member CreateDefault() =
             let logger =
@@ -431,7 +438,9 @@ module Operators =
                 #endif
 
             { Logger = logger
-              MaximumEmptyColumnNumber = Some 26 }
+              MaximumEmptyColumnNumber = Some 26
+              Accum_DuplicateOptions = Accum_DuplicateOptions.AllowDuplicate
+              }
 
 
 

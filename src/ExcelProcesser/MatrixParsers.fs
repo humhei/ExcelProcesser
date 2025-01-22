@@ -1215,6 +1215,98 @@ let atLeastX minimunCount (p: MatrixParser<'a list>) =
         list.Length >= minimunCount
     )
 
+[<RequireQualifiedAccess>]
+type private LoopTarget<'result> =
+    | CalcListOutputStreams of inputStream: InputMatrixStream * OutputMatrixStream<'result> list
+    | LoopNormal
+
+type private LoopMatrixOutStreamElement<'result> =
+    { InputStream: InputMatrixStream 
+      OutStream: OutputMatrixStream<'result>
+      Accum: OutputMatrixStream<'result> list}
+
+[<RequireQualifiedAccess>]
+type private LoopMatrixStream<'result> =
+    | Input of InputMatrixStream
+    | Output of elements: LoopMatrixOutStreamElement<'result> list
+
+
+let rec private loop_tail_call (p) (accumResizeArray: ResizeArray<_>) (maxCount: int option) direction (accum: OutputMatrixStream<'result> list) stream  = 
+    let isSkip outputStream = 
+        outputStream.Result.IsSkip
+
+    let isReachMaxCount =
+        match maxCount with 
+        | Some maxCount -> 
+            accum.Length >= maxCount
+        | None -> false
+
+    if isReachMaxCount then accumResizeArray.Add(accum)
+    else
+        match stream with
+        | LoopMatrixStream.Input inputStream ->
+            match p inputStream with 
+            | List.Some outputStreams ->
+                let skip, outputStreams = List.partition isSkip outputStreams 
+                let r1 = List.replicate skip.Length []
+                accumResizeArray.AddRange(r1)
+
+                outputStreams
+                |> List.map(fun outputStream ->
+                    {
+                        InputStream = inputStream
+                        OutStream   = outputStream
+                        Accum       = (accum @ outputStreams) 
+                    }
+                )
+                |> LoopMatrixStream.Output
+                |> loop_tail_call p accumResizeArray maxCount direction (accum @ outputStreams) 
+
+            | List.None -> accumResizeArray.Add([])
+
+        | LoopMatrixStream.Output (outputStreams1) ->
+            
+            match outputStreams1 with 
+            | outputStreamElement1 :: t ->
+                let preInputStream = outputStreamElement1.InputStream
+                let outputStream1 = outputStreamElement1.OutStream
+                let accum         = outputStreamElement1.Accum
+
+                let inputStream = (OutputMatrixStream.applyDirectionToShift direction preInputStream outputStream1).AsInputStream
+                match p inputStream with 
+                | List.Some outputStreams2 ->
+                    let skip, outputStreams2 = List.partition isSkip outputStreams2
+
+                    let r1 = List.replicate skip.Length []
+                    accumResizeArray.AddRange(r1)
+                    let accumNew = accum @ outputStreams2
+
+                    let outputStreams = 
+                        outputStreams2
+                        |> List.map(fun outputStream ->
+                            {
+                                InputStream = inputStream
+                                OutStream   = outputStream
+                                Accum       = accumNew
+                            }
+                        )
+
+                    (t @ outputStreams)
+                    |> LoopMatrixStream.Output
+                    |> loop_tail_call
+                        p 
+                        accumResizeArray
+                        maxCount
+                        direction 
+                        (accumNew) 
+
+                | List.None ->  accumResizeArray.Add accum
+
+            | [] -> accumResizeArray.Add accum
+
+
+
+
 
 let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result>) = map p <| fun p ->
     let isSkip outputStream = 
@@ -1222,45 +1314,45 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
 
     fun inputStream ->  
         let accumResizeArray = ResizeArray()
-        let rec loop stream (accum: OutputMatrixStream<'result> list) = 
-            let isReachMaxCount =
-                match maxCount with 
-                | Some maxCount -> 
-                    accum.Length >= maxCount
-                | None -> false
+        //let rec loop stream (accum: OutputMatrixStream<'result> list) = 
+        //    let isReachMaxCount =
+        //        match maxCount with 
+        //        | Some maxCount -> 
+        //            accum.Length >= maxCount
+        //        | None -> false
 
-            if isReachMaxCount then accumResizeArray.Add(accum)
-            else
-                match stream with
-                | MatrixStream.Input inputStream ->
-                    match p inputStream with 
-                    | List.Some outputStreams ->
-                        let skip, outputStreams = List.partition isSkip outputStreams 
-                        let r1 = List.replicate skip.Length []
-                        accumResizeArray.AddRange(r1)
-                        loop (MatrixStream.Output (inputStream,outputStreams)) (accum @ outputStreams) 
+        //    if isReachMaxCount then accumResizeArray.Add(accum)
+        //    else
+        //        match stream with
+        //        | MatrixStream.Input inputStream ->
+        //            match p inputStream with 
+        //            | List.Some outputStreams ->
+        //                let skip, outputStreams = List.partition isSkip outputStreams 
+        //                let r1 = List.replicate skip.Length []
+        //                accumResizeArray.AddRange(r1)
+        //                loop (MatrixStream.Output (inputStream,outputStreams)) (accum @ outputStreams) 
 
-                    | List.None -> accumResizeArray.Add([])
+        //            | List.None -> accumResizeArray.Add([])
 
-                | MatrixStream.Output (preInputStream, outputStreams1) ->
-                    match outputStreams1 with 
-                    | List.Some outputStreams1 ->
-                        outputStreams1
-                        |> List.iter (fun outputStream1 -> 
-                            let inputStream = (OutputMatrixStream.applyDirectionToShift direction preInputStream outputStream1).AsInputStream
-                            match p inputStream with 
-                            | List.Some outputStreams2 ->
-                                let skip, outputStreams2 = List.partition isSkip outputStreams2
+        //        | MatrixStream.Output (preInputStream, outputStreams1) ->
+        //            match outputStreams1 with 
+        //            | List.Some outputStreams1 ->
+        //                outputStreams1
+        //                |> List.iter (fun outputStream1 -> 
+        //                    let inputStream = (OutputMatrixStream.applyDirectionToShift direction preInputStream outputStream1).AsInputStream
+        //                    match p inputStream with 
+        //                    | List.Some outputStreams2 ->
+        //                        let skip, outputStreams2 = List.partition isSkip outputStreams2
 
-                                let r1 = List.replicate skip.Length []
-                                accumResizeArray.AddRange(r1)
+        //                        let r1 = List.replicate skip.Length []
+        //                        accumResizeArray.AddRange(r1)
 
-                                loop (MatrixStream.Output (inputStream, outputStreams2)) (accum @ outputStreams2)
+        //                        loop (MatrixStream.Output (inputStream, outputStreams2)) (accum @ outputStreams2)
 
-                            | List.None ->  accumResizeArray.Add accum
+        //                    | List.None ->  accumResizeArray.Add accum
                         
-                        )
-                    | List.None -> accumResizeArray.Add accum
+        //                )
+        //            | List.None -> accumResizeArray.Add accum
         
 
 
@@ -1268,7 +1360,7 @@ let mxManyWithMaxCount direction (maxCount: int option) (p: MatrixParser<'result
 
 
         let outputStreamLists = 
-            loop (MatrixStream.Input inputStream) []
+            loop_tail_call p accumResizeArray maxCount direction [] (LoopMatrixStream.Input inputStream) 
             List.ofSeq accumResizeArray
 
         //let rec loop stream (accum: OutputMatrixStream<'result> list) = [
@@ -1796,7 +1888,7 @@ let r8 p1 p2 p3 p4 p5 p6 p7 p8 =
         a, b, c, d, e, f, g, h
     )
 
-let private runMatrixParserForRangesWithStreamsAsResult_Common addr logger (ranges : seq<SingletonExcelRangeBaseUnion>) (p : MatrixParser<_>) =
+let private runMatrixParserForRangesWithStreamsAsResult_Common accum_DuplicateOptions addr logger (ranges : seq<SingletonExcelRangeBaseUnion>) (p : MatrixParser<_>) =
     let ranges =
         ranges 
         |> List.ofSeq
@@ -1812,13 +1904,47 @@ let private runMatrixParserForRangesWithStreamsAsResult_Common addr logger (rang
               }
         )
     let r = 
-        inputStreams 
-        |> List.collect p.Invoke
+        match accum_DuplicateOptions with 
+        | Accum_DuplicateOptions.AllowDuplicate ->
+            inputStreams 
+            |> List.collect p.Invoke
 
+        | Accum_DuplicateOptions.SkipDuplicateWhenRowsCount predicate -> 
+            let rows = addr.Value.Rows
+            match predicate.Predicate rows with
+            | false ->
+                inputStreams 
+                |> List.collect p.Invoke
+
+            | true ->
+                let rec loop (addrs: ComparableExcelAddress list) accum (inputStreams: InputMatrixStream list)  =
+                    match inputStreams with 
+                    | inputStream :: t ->
+                        addrs
+                        |> List.tryFind(fun addr ->
+                            addr.Contains(inputStream.Range.ExcelCellAddress)
+                        )
+                        |> function
+                            | Some _ -> loop addrs (accum) t
+                            | None -> 
+                                let r = p.Invoke inputStream
+                                match r with 
+                                | [] -> loop addrs accum t
+                                | rs ->
+                                    let addrs2 = 
+                                        rs
+                                        |> List.map(fun m -> m.RangeToOffsetedRange.ComparableExcelAddress())
+
+                                    loop (addrs @ addrs2) (accum @ r) t
+
+
+                    | [] -> accum
+
+                loop [] [] inputStreams
     r
 
 let private runMatrixParserForRangesWithStreamsAsResult addr (ranges : seq<SingletonExcelRangeBaseUnion>) (p : MatrixParser<_>) =
-    runMatrixParserForRangesWithStreamsAsResult_Common addr (new Logger()) ranges p
+    runMatrixParserForRangesWithStreamsAsResult_Common Accum_DuplicateOptions.DefaultValue addr (new Logger()) ranges p
 
 let private runMatrixParserForRanges addr (ranges : seq<SingletonExcelRangeBaseUnion>) (p : MatrixParser<_>) =
 
@@ -1853,7 +1979,7 @@ let runMatrixParserForRangeWithStreamsAsResult2_Union (logger: Logger) (range : 
     let ranges = 
         ExcelRangeUnion.asRangeList range
 
-    runMatrixParserForRangesWithStreamsAsResult_Common address logger ranges p
+    runMatrixParserForRangesWithStreamsAsResult_Common Accum_DuplicateOptions.DefaultValue address logger ranges p
 
 
 let runMatrixParserForRangeWithStreamsAsResult2 (logger: Logger) (range : ExcelRangeBase) (p : MatrixParser<_>) =
@@ -1867,7 +1993,7 @@ let runMatrixParserForRangeWithStreamsAsResult2_All_Union (logger: Logger) (rang
     let ranges = 
         ExcelRangeUnion.asRangeList_All range
 
-    runMatrixParserForRangesWithStreamsAsResult_Common address logger ranges p
+    runMatrixParserForRangesWithStreamsAsResult_Common  Accum_DuplicateOptions.DefaultValue address logger ranges p
 
 /// Including Empty Ranges
 let runMatrixParserForRangeWithStreamsAsResult2_All (logger: Logger) (range : ExcelRangeBase) (p : MatrixParser<_>) =
@@ -1988,7 +2114,7 @@ let  private runMatrixParserWithStreamsAsResult_Common (worksheet: ValidExcelWor
         }
         |> ParsingAddress
 
-    let r = runMatrixParserForRangesWithStreamsAsResult_Common addr configuration.Logger userRange p
+    let r = runMatrixParserForRangesWithStreamsAsResult_Common configuration.Accum_DuplicateOptions addr configuration.Logger userRange p
     r
 
 
@@ -2003,6 +2129,22 @@ let runMatrixParserWithStreamsAsResult (worksheet: ValidExcelWorksheet) (p: Matr
 let runMatrixParserWithStreamsAsResultSafe (worksheet: ValidExcelWorksheet) (p: MatrixParser<'result>) =
 
     let configuration = Configuration.CreateDefault()
+    let logger        = configuration.Logger
+
+    match runMatrixParserWithStreamsAsResult_Common worksheet (configuration) p with 
+    | [] -> 
+        match logger.Messages().IsEmpty with 
+        | true -> 
+            let msg = sprintf "SheetName: %s\n ParsingTarget: %s\nAll named parsed are parsed failured %A\nStackTrace:\n%s"  worksheet.Name (typeof<'result>.Name) p System.Environment.StackTrace 
+            raise(ExcelProcesserPasingErrorException(msg, logger))
+            
+        | false ->
+            let msg = sprintf "SheetName: %s\n ParsingTarget: %s\n%A\nStackTrace%s" worksheet.Name (typeof<'result>.Name) (logger.Messages()) System.Environment.StackTrace 
+            raise(ExcelProcesserPasingErrorException(msg, logger))
+    | outputStreams -> (AtLeastOneList.Create outputStreams)
+
+let runMatrixParserWithStreamsAsResultSafeWith (configuration: Configuration) (worksheet: ValidExcelWorksheet) (p: MatrixParser<'result>) =
+
     let logger        = configuration.Logger
 
     match runMatrixParserWithStreamsAsResult_Common worksheet (configuration) p with 

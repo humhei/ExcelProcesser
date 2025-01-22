@@ -328,7 +328,7 @@ let matrixTests =
         | _ -> fail()
 
 
-    testCase "column many" <| fun _ -> 
+    ftestCase "column many" <| fun _ -> 
         let results = 
             runMatrixParser 
                 worksheet 
