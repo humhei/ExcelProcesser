@@ -333,8 +333,8 @@ with
     member x.ComparableExcelAddress = x.Value
 
 
-[<DebuggerDisplay("{Range.Address} {Range.Text}")>]
-[<StructuredFormatDisplay("{Range.Address} {Range.Text}")>]
+[<DebuggerDisplay("({Range.Address},{Range.Text}) - ({OffsetedRange.Address},{OffsetedRange.Text})")>]
+[<StructuredFormatDisplay("({Range.Address},{Range.Text}) - ({OffsetedRange.Address},{OffsetedRange.Text})")>]
 type InputMatrixStream = 
     { Range: SingletonExcelRangeBaseUnion
       Shift: Shift
@@ -1074,12 +1074,28 @@ let mxOR (p1: MatrixParser<'result1>) (p2: MatrixParser<'result2>) =
 let mxAnySkip_IncludingEof =
     mxOR (mxEOF) mxAnySkip
 
+let mxAnyOf parsers =
+    parsers
+    |> List.reduce (fun p1 p2 ->
+        let r = mxOR p1 p2
+        let r = 
+            r 
+            ||>> fun v -> 
+                match v with 
+                | Choice1Of2 v -> v
+                | Choice2Of2 v -> v
+
+        r
+    )
+
 let mxNot (p1: SingletonMatrixParser<'result1>) =
     fun inputStream ->
         match p1.Invoke inputStream with
         | Some outputStreams -> None
         | None -> mxAnyOrigin.Invoke inputStream
     |> SingletonMatrixParser
+
+
 
 let (<||>) (p1: MatrixParser<'result>) (p2: MatrixParser<'result>) =
     mxOR p1 p2

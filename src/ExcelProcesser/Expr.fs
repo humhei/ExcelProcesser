@@ -20,14 +20,31 @@ open MatrixParsers
 
 [<AutoOpen>]
 module _Expr =
+    
+    type TextFormatOptions =
+        { TrimAllToOne: bool 
+          TrimAll: bool 
+          Normalize: bool }
+
+        static member Non =
+            { TrimAll = false 
+              TrimAllToOne = false 
+              Normalize = false }
+
     module MatrixParsers = 
-        let mxExprEx trimAllToOne (expr:TextSelectorOrTransformExpr) = 
+        let mxExprEx (formatOptions: TextFormatOptions) (expr:TextSelectorOrTransformExpr) = 
             mxTextf_Range(fun range ->
                 let text = range.Text
                 let text = text.Trim()
                 let text =
-                    match trimAllToOne with 
-                    | true -> Text.trimAllToOne text
+                    match formatOptions.TrimAll, formatOptions.TrimAllToOne with 
+                    | true, _ -> Text.trimAll text
+                    | _, true -> Text.trimAllToOne text
+                    | _ -> text
+
+                let text =
+                    match formatOptions.Normalize with 
+                    | true -> Shrimp.FSharp.Plus.Text.Text.normalize text
                     | false -> text
 
                 match expr.Transform_Typed text with 
@@ -39,8 +56,9 @@ module _Expr =
                 | None -> false
             )
 
+
         let mxExpr (expr:TextSelectorOrTransformExpr) = 
-            mxExprEx false expr
+            mxExprEx TextFormatOptions.Non expr
 
 
         [<RequireQualifiedAccess>]
@@ -469,14 +487,14 @@ module _Expr =
                                 |> MatrixParserExpr.MxExpr
                                 |> Result.Ok
 
-            member x.ToMatrixParser(?trimAllToOne: bool) =
+            member x.ToMatrixParser(?textFormatOptions) =
                 let redirectMaxCount maxCount =
                     match maxCount with 
                     | -1 
                     | 0 -> None
                     | _ -> Some maxCount
 
-                let trimAllToOne = defaultArg trimAllToOne false
+                let textFormatOptions = defaultArg textFormatOptions TextFormatOptions.Non
                 match x with 
                 | ColIndex (colIndex) -> 
                     let parser = 
@@ -490,20 +508,20 @@ module _Expr =
 
 
                 | XUntil (xOffset, pPrevious, expr) -> 
-                    mxUntil1 Direction.Horizontal (Some xOffset) (pPrevious.ToMatrixParser(trimAllToOne = trimAllToOne)) (expr.ToMatrixParser(trimAllToOne = trimAllToOne))
+                    mxUntil1 Direction.Horizontal (Some xOffset) (pPrevious.ToMatrixParser(textFormatOptions = textFormatOptions)) (expr.ToMatrixParser(textFormatOptions = textFormatOptions))
                     ||>> snd
 
                 | YUntil (yOffset, pPrevious, expr) ->     
-                    mxUntil1 Direction.Vertical (Some yOffset) (pPrevious.ToMatrixParser(trimAllToOne = trimAllToOne)) (expr.ToMatrixParser(trimAllToOne = trimAllToOne))
+                    mxUntil1 Direction.Vertical (Some yOffset) (pPrevious.ToMatrixParser(textFormatOptions = textFormatOptions)) (expr.ToMatrixParser(textFormatOptions = textFormatOptions))
                     ||>> snd
 
-                | MxExpr expr -> mxExprEx trimAllToOne expr
+                | MxExpr expr -> mxExprEx textFormatOptions expr
                 | XMany1 (maxCount, expr, minimunCount) -> 
                     mxManyXWithMaxCount 
                         minimunCount
                         Direction.Horizontal 
                         (maxCount |> redirectMaxCount)
-                        (expr.ToMatrixParser(trimAllToOne = trimAllToOne))
+                        (expr.ToMatrixParser(textFormatOptions = textFormatOptions))
                     ||>> String.concat "@@"
                 
                 | YMany1 (maxCount, expr, minimunCount) -> 
@@ -511,35 +529,35 @@ module _Expr =
                         minimunCount
                         Direction.Vertical 
                         (maxCount |> redirectMaxCount)
-                        (expr.ToMatrixParser(trimAllToOne = trimAllToOne))
+                        (expr.ToMatrixParser(textFormatOptions = textFormatOptions))
                     ||>> String.concat "@@"
 
                 | XManySkip1 (pSkip, maxSkipCount, expr) ->
                     /// Atleast 1 skip
                     mxMany1Skip1 
                         Direction.Horizontal
-                        (pSkip.ToMatrixParser(trimAllToOne = trimAllToOne))
+                        (pSkip.ToMatrixParser(textFormatOptions = textFormatOptions))
                         maxSkipCount
-                        (expr.ToMatrixParser(trimAllToOne = trimAllToOne))
+                        (expr.ToMatrixParser(textFormatOptions = textFormatOptions))
                     ||>> String.concat "@@"
 
                 | YManySkip1 (pSkip, maxSkipCount, expr) ->
                     /// Atleast 1 skip
                     mxMany1Skip1 
                         Direction.Vertical
-                        (pSkip.ToMatrixParser(trimAllToOne = trimAllToOne))
+                        (pSkip.ToMatrixParser(textFormatOptions = textFormatOptions))
                         maxSkipCount
-                        (expr.ToMatrixParser(trimAllToOne = trimAllToOne))
+                        (expr.ToMatrixParser(textFormatOptions = textFormatOptions))
                     ||>> String.concat "@@"
 
                 | XPipe (p1, p2) ->
-                    pipe2 Direction.Horizontal (p1.ToMatrixParser(trimAllToOne = trimAllToOne)) (p2.ToMatrixParser(trimAllToOne = trimAllToOne)) (fun (a, b) ->
+                    pipe2 Direction.Horizontal (p1.ToMatrixParser(textFormatOptions = textFormatOptions)) (p2.ToMatrixParser(textFormatOptions = textFormatOptions)) (fun (a, b) ->
                         [a; b]
                         |> String.concat "@@"
                     )
 
                 | YPipe (p1, p2) ->
-                    pipe2 Direction.Vertical (p1.ToMatrixParser(trimAllToOne = trimAllToOne)) (p2.ToMatrixParser(trimAllToOne = trimAllToOne)) (fun (a, b) ->
+                    pipe2 Direction.Vertical (p1.ToMatrixParser(textFormatOptions = textFormatOptions)) (p2.ToMatrixParser(textFormatOptions = textFormatOptions)) (fun (a, b) ->
                         [a; b]
                         |> String.concat "@@"
                     )
