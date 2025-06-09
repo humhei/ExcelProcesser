@@ -904,6 +904,8 @@ let mxWord = mxRegex "\w"
 
 let mxSpace = mxCellParser pSpace ignore 
 
+let mxEmpty_yield_addr = mxCellParser pSpace (fun m -> m.Address)
+
 let mxEmpty = mxSpace
 
 
@@ -1149,9 +1151,9 @@ let private pipe2RelativelyWithTupleStreamsReturn (direction: Direction) (p1: Ma
             let r = 
                 newStreams1
                 |> List.collect (fun newStream1 ->
-                    match newStream1.OffsetedRange.Address = "G27" with 
-                    | true -> ()
-                    | false -> ()
+                    //match newStream1.OffsetedRange.Address = "G27" with 
+                    //| true -> ()
+                    //| false -> ()
                     let shiftedNewStream1 = OutputMatrixStream.applyDirectionToShift direction inputstream1 newStream1
                     let p2 = buildP2 shiftedNewStream1
                     let inputStream2 = (shiftedNewStream1).AsInputStream
@@ -1775,6 +1777,8 @@ let mxMerge direction =
 
 
 let mxColMany p = mxMany Direction.Horizontal p
+
+let mxColMany_Zero_OR_One p = mxManyWithMaxCount Direction.Horizontal (Some 1) p
 
 let mxColMany1 p = mxMany1 Direction.Horizontal p
 let mxColMany1Op maxSkipCount p = mxMany1Op Direction.Horizontal maxSkipCount p
