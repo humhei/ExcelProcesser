@@ -76,6 +76,7 @@ module _Expr =
             | MxEmpty
             | XPipe of p1: MatrixParserExpr * p2:MatrixParserExpr
             | YPipe of p1: MatrixParserExpr * p2:MatrixParserExpr
+            | MxEOF
         with 
             static member MethodConversion_ColIndex(?colIndex): MethodLiteralConversion<MatrixParserExpr> =
                 let name = nameof colIndex
@@ -451,41 +452,63 @@ module _Expr =
                     )
                 }
 
-            static member Parse(text: string) =
+            static member MethodConversion_EOF(): MethodLiteralConversion<MatrixParserExpr> =
+                let name = nameof MxEOF
+                {
+                    MethodLiteral = 
+                        { Name = name
+                          Parameters = Observations.Empty
+                        }
+
+                    OfMethodLiteral = (fun methodLiteral ->
+                        match methodLiteral.Name with 
+                        | EqualTo name ->
+                            MatrixParserExpr.MxEOF
+                            |> Some
+
+                        | _ -> None
+                    )
+                }
+
+            static member Parse(text: string, ?unparsedTreatingOptions) =
                 match text with 
                 | "" -> Result.Error (sprintf "Cannot parse empty text to MatrixParserExpr")
                 | text ->
-                    match MethodLiteral.TryParse text with 
-                    | Result.Error error -> 
-                        TextSelectorOrTransformExpr.Parse text
-                        |> MatrixParserExpr.MxExpr
-                        |> Result.Ok
-                        //Result.Error error
+                    match text with 
+                    | String.EqualIC "$EOF" -> Result.Ok MatrixParserExpr.MxEOF
+                    | _ -> 
+                        match MethodLiteral.TryParse text with 
+                        | Result.Error error -> 
+                            TextSelectorOrTransformExpr.Parse(text, ?unparsedTreatingOptions = unparsedTreatingOptions)
+                            |> MatrixParserExpr.MxExpr
+                            |> Result.Ok
+                            //Result.Error error
 
 
-                    | Result.Ok methodLiteral ->
-                        [
-                            MatrixParserExpr.MethodConversion_ColIndex()
-                            MatrixParserExpr.MethodConversion_XUntil()
-                            MatrixParserExpr.MethodConversion_YUntil()
-                            MatrixParserExpr.MethodConversion_Empty()
-                            MatrixParserExpr.MethodConversion_XMany1()
-                            MatrixParserExpr.MethodConversion_XManySkip1()
-                            MatrixParserExpr.MethodConversion_YMany1()
-                            MatrixParserExpr.MethodConversion_YManySkip1()
-                            MatrixParserExpr.MethodConversion_Expr()
-                            MatrixParserExpr.MethodConversion_XPipe()
-                            MatrixParserExpr.MethodConversion_YPipe()
-                        ]
-                        |> List.tryPick(fun m -> 
-                            m.OfMethodLiteral(methodLiteral)
-                        )
-                        |> function
-                            | Some v -> Result.Ok v
-                            | None ->
-                                TextSelectorOrTransformExpr.Parse text
-                                |> MatrixParserExpr.MxExpr
-                                |> Result.Ok
+                        | Result.Ok methodLiteral ->
+                            [
+                                MatrixParserExpr.MethodConversion_ColIndex()
+                                MatrixParserExpr.MethodConversion_XUntil()
+                                MatrixParserExpr.MethodConversion_YUntil()
+                                MatrixParserExpr.MethodConversion_Empty()
+                                MatrixParserExpr.MethodConversion_XMany1()
+                                MatrixParserExpr.MethodConversion_XManySkip1()
+                                MatrixParserExpr.MethodConversion_YMany1()
+                                MatrixParserExpr.MethodConversion_YManySkip1()
+                                MatrixParserExpr.MethodConversion_Expr()
+                                MatrixParserExpr.MethodConversion_XPipe()
+                                MatrixParserExpr.MethodConversion_YPipe()
+                                MatrixParserExpr.MethodConversion_EOF()
+                            ]
+                            |> List.tryPick(fun m -> 
+                                m.OfMethodLiteral(methodLiteral)
+                            )
+                            |> function
+                                | Some v -> Result.Ok v
+                                | None ->
+                                    TextSelectorOrTransformExpr.Parse(text, ?unparsedTreatingOptions = unparsedTreatingOptions)
+                                    |> MatrixParserExpr.MxExpr
+                                    |> Result.Ok
 
             member x.ToMatrixParser(?textFormatOptions) =
                 let redirectMaxCount maxCount =
@@ -563,3 +586,4 @@ module _Expr =
                     )
 
                 | MxEmpty -> (mxEmpty :> MatrixParser<_>) ||>> fun _ -> ""
+                | MxEOF -> (mxEOF :> MatrixParser<_>) ||>> fun _ -> ""

@@ -159,6 +159,28 @@ module Extensions =
         let getUserRangeListWith maximumEmptyColumns (worksheet: ExcelWorksheet) =
             let maxRow = getMaxRowNumber worksheet
             let maxCol = getMaxColNumber worksheet
+            let maxRow =
+                match maxRow with 
+                | BiggerOrEqual 60000 -> 
+                    let maxCol = min maxCol 100
+                    let lastDatas = 
+                        [ for row in (maxRow-10)..maxRow do
+                              for col in 1..maxCol do
+                                  let content = worksheet.Cells.[row, col]
+                                  yield SingletonExcelRangeBase.Create(content :> ExcelRangeBase) ]
+
+                    let lastDatas =
+                        lastDatas
+                        |> List.filter(fun row ->
+                            row.Text <> ""
+                        )
+
+                    match lastDatas.Length with 
+                    | SmallerThan 5 -> 10000
+                    | _ -> maxRow
+
+                | _ -> maxRow
+
 
             match maximumEmptyColumns with 
             | None ->
@@ -203,8 +225,21 @@ module Extensions =
 
                 let r = 
                     r
+                    |> List.transpose
+
+                let r =
+                    let i = 
+                        r
+                        |> List.findIndexBack(fun row ->
+                            row
+                            |> List.exists(fun m -> m.Text <> "")
+                        )
+
+                    r.[0..i+1]
+
+                let r =
+                    r
                     |> array2D
-                    |> Array2D.transpose
 
                 let r2 =
                     r

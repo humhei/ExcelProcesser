@@ -71,7 +71,7 @@ with
         )
         |> List.filter(fun m -> 
             match m.Value with 
-            | ConvertibleUnion.Missing _ -> false
+            | ConvertibleUnion.Missing -> false
             | _ -> true
         )
 
