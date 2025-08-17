@@ -655,11 +655,11 @@ module OutputMatrixStream =
           ParsingAddress = stream.ParsingAddress
           Logger = stream.Logger }
 
-    let removeRedundants (streams: OutputMatrixStream<'result> list) =
+    let private removeRedundants_common getAddr (streams: OutputMatrixStream<'result> list) =
         let streamWithAddressList =
             streams
             |> List.map (fun stream ->
-                ComparableExcelAddress.OfAddress(stream.Range.RangeTo(stream.OffsetedRange).Address), stream
+                getAddr stream, stream
             )
 
         let length = streamWithAddressList.Length
@@ -681,6 +681,20 @@ module OutputMatrixStream =
 
         loop 0 streamWithAddressList
         |> List.map snd
+
+    let removeRedundants (streams: OutputMatrixStream<'result> list) =
+        removeRedundants_common 
+            (fun stream ->
+                ComparableExcelAddress.OfAddress(stream.Range.RangeTo(stream.OffsetedRange).Address)
+            )
+            streams
+
+    let removeRedundants_AllShifts (streams: OutputMatrixStream<'result> list) =
+        removeRedundants_common 
+            (fun stream ->
+                ComparableExcelAddress.OfAddress(stream.RangeToOffsetedRange_AllShifts.Address)
+            )
+            streams
 
 
 [<RequireQualifiedAccess>]
